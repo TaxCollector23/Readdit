@@ -40,7 +40,13 @@ async function* readNdjson(res: Response): AsyncGenerator<StreamEvent> {
   let buffer = "";
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {
+      // Flush any pending multi-byte sequence and process a final line that
+      // might not end in a newline (defensive — today's server always
+      // terminates every event with \n, but don't rely on that here).
+      buffer += decoder.decode();
+      break;
+    }
     buffer += decoder.decode(value, { stream: true });
     let idx: number;
     while ((idx = buffer.indexOf("\n")) >= 0) {
@@ -55,11 +61,22 @@ async function* readNdjson(res: Response): AsyncGenerator<StreamEvent> {
       }
     }
   }
+  if (buffer.trim()) {
+    try {
+      yield JSON.parse(buffer) as StreamEvent;
+    } catch {
+      // ignore malformed trailing line
+    }
+  }
 }
 
 export function PlaygroundClient({ isAuthed }: { isAuthed: boolean }) {
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<Mode>("ask");
+  // If the URL carries a `b` param, this is a return-from-login redirect for
+  // a Compare submission (see loginHref below) — restore Compare mode too,
+  // not just the query text, or the auto-submit would silently re-run it as
+  // an Ask against the wrong endpoint.
+  const [mode, setMode] = useState<Mode>(searchParams.get("b") ? "compare" : "ask");
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [topicB, setTopicB] = useState(searchParams.get("b") ?? "");
   const [loading, setLoading] = useState(false);

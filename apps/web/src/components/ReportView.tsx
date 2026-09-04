@@ -10,6 +10,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function BulletList({ items }: { items: string[] }) {
   if (items.length === 0) {
     return <p className="text-sm text-muted">Nothing distinct found in the retrieved evidence.</p>;
@@ -37,7 +41,7 @@ export function ReportView({ report }: { report: RedditReport }) {
         <div className="flex items-center gap-3">
           <SentimentBadge sentiment={report.sentiment} />
           <div className="text-xs text-muted">
-            <div>Confidence: {report.confidence.level}</div>
+            <div>Confidence: {capitalize(report.confidence.level)}</div>
             <div>
               {report.sourceCount} discussions · {report.subreddits.length} subreddits
             </div>

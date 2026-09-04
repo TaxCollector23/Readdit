@@ -4,6 +4,7 @@ import {
   loadEnvFile,
   ReadditError,
   RateLimitedError,
+  ConfigurationError,
   type ReadditOptions,
   type RedditReport,
   type CompareReport,
@@ -125,24 +126,18 @@ function printError(err: unknown, opts: GlobalOpts): void {
   }
 }
 
-function checkConfigOrExit(opts: GlobalOpts): void {
+/**
+ * Throws (rather than calling process.exit itself) so this behaves
+ * correctly no matter where it's called from — including inside the
+ * interactive REPL, where a hard process.exit() would kill the whole
+ * session instead of just failing the one query, and would skip the
+ * readline cleanup in runInteractive's `finally`. execute() below is what
+ * turns this into the right exit code once the process actually ends.
+ */
+function assertConfigured(): void {
   const { ok, missing } = checkConfig();
   if (ok) return;
-  if (opts.json) {
-    process.stdout.write(
-      JSON.stringify(
-        { error: true, code: "configuration_error", message: "Readdit is not configured.", missing },
-        null,
-        2
-      ) + "\n"
-    );
-  } else {
-    process.stderr.write(`${theme.red("Readdit is not configured.")}\n\n`);
-    process.stderr.write("Missing:\n");
-    for (const m of missing) process.stderr.write(`  ${m}\n`);
-    process.stderr.write("\nAdd it to your environment or a .env file. See .env.example.\n");
-  }
-  process.exit(3);
+  throw new ConfigurationError(`Readdit is not configured. Missing: ${missing.join(", ")}`);
 }
 
 async function runAnalyze(
@@ -150,7 +145,7 @@ async function runAnalyze(
   method: "analyze" | "complaints" | "features" | "sentiment",
   opts: GlobalOpts
 ): Promise<void> {
-  checkConfigOrExit(opts);
+  assertConfigured();
   const status = new StatusReporter(!opts.json && !opts.quiet);
   if (!opts.json && !opts.quiet) {
     process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it...")}\n\n`);
@@ -169,7 +164,7 @@ async function runAnalyze(
 }
 
 async function runCompare(topicA: string, topicB: string, opts: GlobalOpts): Promise<void> {
-  checkConfigOrExit(opts);
+  assertConfigured();
   const status = new StatusReporter(!opts.json && !opts.quiet);
   if (!opts.json && !opts.quiet) {
     process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it...")}\n\n`);
@@ -192,7 +187,7 @@ async function runCompare(topicA: string, topicB: string, opts: GlobalOpts): Pro
 }
 
 async function runAsk(question: string, opts: GlobalOpts): Promise<void> {
-  checkConfigOrExit(opts);
+  assertConfigured();
   const status = new StatusReporter(!opts.json && !opts.quiet);
   if (!opts.json && !opts.quiet) {
     process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it...")}\n\n`);
@@ -211,7 +206,7 @@ async function runAsk(question: string, opts: GlobalOpts): Promise<void> {
 }
 
 async function runSearch(topic: string, opts: GlobalOpts): Promise<void> {
-  checkConfigOrExit(opts);
+  assertConfigured();
   const status = new StatusReporter(!opts.json && !opts.quiet);
   if (!opts.json && !opts.quiet) {
     process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Searching, no analysis...")}\n\n`);
@@ -334,12 +329,40 @@ Examples:
 Readdit. It reads Reddit.`
 );
 
+/**
+ * Reads a piped query from stdin, e.g. `echo "Cursor" | readdit`. Bounded by
+ * a short timeout: a non-TTY stdin that's simply open and idle (common
+ * under a process supervisor that hands the child an unused pipe fd) would
+ * otherwise block this for-await loop forever, since there's no EOF and no
+ * data. If nothing arrives quickly, treat it as "nothing was piped" rather
+ * than hanging.
+ */
 async function readStdinIfPiped(): Promise<string | undefined> {
   if (process.stdin.isTTY) return undefined;
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
-  const text = Buffer.concat(chunks).toString("utf8").trim();
-  return text.length > 0 ? text : undefined;
+
+  const TIMED_OUT = Symbol("timed_out");
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), 300);
+    timer.unref?.();
+  });
+
+  const read = (async () => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+    return Buffer.concat(chunks).toString("utf8").trim();
+  })();
+
+  const result = await Promise.race([read, timeout]);
+  clearTimeout(timer!);
+
+  if (result === TIMED_OUT) {
+    // Detach from the still-pending read so an idle stdin can't keep the
+    // process alive waiting for a signal that will never arrive.
+    process.stdin.pause();
+    return undefined;
+  }
+  return result.length > 0 ? result : undefined;
 }
 
 async function runInteractive(opts: GlobalOpts): Promise<void> {

@@ -6,6 +6,10 @@ function bullet(items: string[]): string {
   return items.map((i) => `  • ${i}`).join("\n");
 }
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export function formatReport(report: RedditReport): string {
   const lines: string[] = [];
 
@@ -19,7 +23,7 @@ export function formatReport(report: RedditReport): string {
   const labelText = report.sentiment.label.replace("_", " ").toUpperCase();
   lines.push(
     `${sentimentColor(report.sentiment.label, `${scoreText}  ${labelText}`)}   ${theme.dim(
-      `Confidence: ${report.confidence.level}`
+      `Confidence: ${capitalize(report.confidence.level)}`
     )}`
   );
   lines.push(
