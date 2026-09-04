@@ -2,10 +2,9 @@ import { loadConfig } from "./config.js";
 import { SqliteCacheProvider, MemoryCacheProvider } from "./cache/index.js";
 import { RedditSearchProvider } from "./search/redditProvider.js";
 import { DuckDuckGoSearchProvider } from "./search/duckduckgo.js";
-import { OpenRouterSearchProvider } from "./search/openrouterSearchProvider.js";
 import { CompositeSearchProvider } from "./search/compositeProvider.js";
 import { MockSearchProvider } from "./search/mockProvider.js";
-import { OpenRouterAnalysisProvider } from "./analysis/openrouterProvider.js";
+import { GeminiAnalysisProvider } from "./analysis/geminiProvider.js";
 import { MockAnalysisProvider } from "./analysis/mockProvider.js";
 import { ReadditCore } from "./index.js";
 import type { AnalysisProvider, SearchProvider } from "./types.js";
@@ -17,43 +16,60 @@ export interface CreateCoreOptions {
   memoryCache?: boolean;
 }
 
+function buildSearchProvider(requestId?: string): SearchProvider {
+  const config = loadConfig({ requireAi: false });
+  const useMock = process.env.READDIT_MOCK_PROVIDERS === "1";
+
+  return useMock
+    ? new MockSearchProvider()
+    : new CompositeSearchProvider(
+        [
+          new RedditSearchProvider(config.userAgent, requestId),
+          new DuckDuckGoSearchProvider(config.userAgent, requestId),
+        ],
+        requestId
+      );
+}
+
+function buildCache(memoryCache: boolean | undefined) {
+  const config = loadConfig({ requireAi: false });
+  return memoryCache ? new MemoryCacheProvider() : new SqliteCacheProvider(config.databasePath);
+}
+
 /**
  * Builds a fully wired ReadditCore from environment configuration. This is
  * the single construction path shared by the CLI, MCP server, and web app —
  * so a fix to provider wiring benefits every interface at once.
  */
 export function createCoreFromEnv(opts: CreateCoreOptions = {}): ReadditCore {
-  const config = loadConfig();
+  const config = loadConfig({ requireAi: true });
 
   const useMock = process.env.READDIT_MOCK_PROVIDERS === "1";
 
-  const searchProvider: SearchProvider = useMock
-    ? new MockSearchProvider()
-    : new CompositeSearchProvider(
-        [
-          new RedditSearchProvider(config.userAgent, opts.requestId),
-          new DuckDuckGoSearchProvider(config.userAgent, opts.requestId),
-          new OpenRouterSearchProvider(
-            config.openrouterApiKey,
-            config.openrouterModel,
-            opts.requestId
-          ),
-        ],
-        opts.requestId
-      );
+  const searchProvider = buildSearchProvider(opts.requestId);
 
   const analysisProvider: AnalysisProvider = useMock
     ? new MockAnalysisProvider()
-    : new OpenRouterAnalysisProvider(config.openrouterApiKey, opts.model ?? config.openrouterModel);
+    : new GeminiAnalysisProvider(config.geminiApiKey!, opts.model ?? config.geminiModel);
 
-  const cache = opts.memoryCache
-    ? new MemoryCacheProvider()
-    : new SqliteCacheProvider(config.databasePath);
+  const cache = buildCache(opts.memoryCache);
 
   return new ReadditCore({
     searchProvider,
     analysisProvider,
     cache,
+    cacheTtlSeconds: config.cacheTtlSeconds,
+  });
+}
+
+/** Builds a core instance suitable for retrieval-only APIs; no Gemini key required. */
+export function createSearchCoreFromEnv(opts: CreateCoreOptions = {}): ReadditCore {
+  const config = loadConfig({ requireAi: false });
+
+  return new ReadditCore({
+    searchProvider: buildSearchProvider(opts.requestId),
+    analysisProvider: new MockAnalysisProvider(),
+    cache: buildCache(opts.memoryCache),
     cacheTtlSeconds: config.cacheTtlSeconds,
   });
 }

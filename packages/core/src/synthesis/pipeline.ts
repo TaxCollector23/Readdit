@@ -9,7 +9,7 @@ import type {
   Sentiment,
   SubredditBreakdown,
 } from "../types.js";
-import { OpenRouterClient } from "../analysis/openrouterClient.js";
+import type { JsonModelClient } from "../analysis/jsonClient.js";
 import {
   chunkAnalysisSystemPrompt,
   chunkAnalysisUserPrompt,
@@ -61,7 +61,7 @@ interface MergedObservation extends Observation {
  * guard: the model literally cannot reference a source that doesn't exist).
  */
 export async function analyzeChunks(
-  client: OpenRouterClient,
+  client: JsonModelClient,
   model: string,
   topic: string,
   intent: ReadditIntent,
@@ -167,7 +167,7 @@ export function summarizeObservationsForPrompt(merged: MergedObservation[]): str
 }
 
 async function callSynthesisWithRetry(
-  client: OpenRouterClient,
+  client: JsonModelClient,
   model: string,
   system: string,
   user: string,
@@ -268,7 +268,7 @@ function computeConfidence(
 }
 
 export interface SynthesizeArgs {
-  client: OpenRouterClient;
+  client: JsonModelClient;
   model: string;
   topic: string;
   intent: ReadditIntent;
@@ -356,7 +356,7 @@ export async function synthesizeReport(args: SynthesizeArgs): Promise<RedditRepo
 }
 
 async function callCompareSynthesisWithRetry(
-  client: OpenRouterClient,
+  client: JsonModelClient,
   model: string,
   system: string,
   user: string,
@@ -383,7 +383,7 @@ async function callCompareSynthesisWithRetry(
 }
 
 export interface SynthesizeCompareArgs {
-  client: OpenRouterClient;
+  client: JsonModelClient;
   model: string;
   topicA: string;
   topicB: string;

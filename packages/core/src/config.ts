@@ -1,11 +1,16 @@
 import { ConfigurationError } from "./types.js";
 
 export interface ReadditConfig {
-  openrouterApiKey: string;
-  openrouterModel: string;
+  geminiApiKey?: string;
+  geminiModel: string;
   databasePath: string;
   cacheTtlSeconds: number;
   userAgent: string;
+}
+
+export interface LoadConfigOptions {
+  /** Analysis/synthesis needs Gemini; retrieval-only paths do not. */
+  requireAi?: boolean;
 }
 
 function readEnv(name: string): string | undefined {
@@ -18,12 +23,13 @@ function readEnv(name: string): string | undefined {
  * raise a ConfigurationError with the exact variable name(s) that are missing
  * so CLI/web/MCP callers can surface an actionable message instead of a stack trace.
  */
-export function loadConfig(): ReadditConfig {
+export function loadConfig(options: LoadConfigOptions = {}): ReadditConfig {
+  const requireAi = options.requireAi ?? true;
   const mockMode = readEnv("READDIT_MOCK_PROVIDERS") === "1";
   const missing: string[] = [];
 
-  const openrouterApiKey = readEnv("OPENROUTER_API_KEY");
-  if (!openrouterApiKey && !mockMode) missing.push("OPENROUTER_API_KEY");
+  const geminiApiKey = readEnv("GEMINI_API_KEY") ?? readEnv("GOOGLE_AI_STUDIO_API_KEY");
+  if (!geminiApiKey && requireAi && !mockMode) missing.push("GEMINI_API_KEY");
 
   if (missing.length > 0) {
     throw new ConfigurationError(
@@ -32,8 +38,8 @@ export function loadConfig(): ReadditConfig {
   }
 
   return {
-    openrouterApiKey: openrouterApiKey ?? "mock-key",
-    openrouterModel: readEnv("OPENROUTER_MODEL") ?? "openai/gpt-4o-mini",
+    geminiApiKey,
+    geminiModel: readEnv("GEMINI_MODEL") ?? "gemini-2.5-flash",
     databasePath: readEnv("DATABASE_URL") ?? "./data/readdit.db",
     cacheTtlSeconds: Number(readEnv("READDIT_CACHE_TTL_SECONDS") ?? 21600),
     userAgent:
@@ -43,9 +49,12 @@ export function loadConfig(): ReadditConfig {
 }
 
 /** Non-throwing variant used by health checks / diagnostics. */
-export function checkConfig(): { ok: boolean; missing: string[] } {
+export function checkConfig(options: LoadConfigOptions = {}): { ok: boolean; missing: string[] } {
+  const requireAi = options.requireAi ?? true;
   if (readEnv("READDIT_MOCK_PROVIDERS") === "1") return { ok: true, missing: [] };
   const missing: string[] = [];
-  if (!readEnv("OPENROUTER_API_KEY")) missing.push("OPENROUTER_API_KEY");
+  if (requireAi && !readEnv("GEMINI_API_KEY") && !readEnv("GOOGLE_AI_STUDIO_API_KEY")) {
+    missing.push("GEMINI_API_KEY");
+  }
   return { ok: missing.length === 0, missing };
 }

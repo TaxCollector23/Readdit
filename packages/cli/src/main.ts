@@ -1,5 +1,6 @@
 import {
   createCoreFromEnv,
+  createSearchCoreFromEnv,
   checkConfig,
   loadEnvFile,
   ReadditError,
@@ -25,7 +26,7 @@ program
   .version("0.1.0")
   .option("--json", "output machine-readable JSON only (no decorative output)")
   .option("--limit <number>", "max discussions to retrieve", parseIntOption)
-  .option("--model <model>", "OpenRouter model override, e.g. anthropic/claude-sonnet-4.5")
+  .option("--model <model>", "Gemini model override, e.g. gemini-2.5-flash")
   .option("--fresh", "bypass the cache and re-research")
   .option("--verbose", "print diagnostic info on failure")
   .option("--quiet", "suppress status lines")
@@ -206,13 +207,12 @@ async function runAsk(question: string, opts: GlobalOpts): Promise<void> {
 }
 
 async function runSearch(topic: string, opts: GlobalOpts): Promise<void> {
-  assertConfigured();
   const status = new StatusReporter(!opts.json && !opts.quiet);
   if (!opts.json && !opts.quiet) {
     process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Searching, no analysis...")}\n\n`);
   }
 
-  const core = createCoreFromEnv({ model: opts.model });
+  const core = createSearchCoreFromEnv({});
   const { discussions, queriesUsed } = await core.search(topic, readditOptionsFrom(opts, status));
 
   if (opts.json) {

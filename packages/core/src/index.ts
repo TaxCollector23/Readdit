@@ -28,6 +28,7 @@ export { OpenRouterSearchProvider } from "./search/openrouterSearchProvider.js";
 export { CompositeSearchProvider } from "./search/compositeProvider.js";
 export { MockSearchProvider } from "./search/mockProvider.js";
 export { OpenRouterAnalysisProvider } from "./analysis/openrouterProvider.js";
+export { GeminiAnalysisProvider } from "./analysis/geminiProvider.js";
 export { MockAnalysisProvider } from "./analysis/mockProvider.js";
 export { RateLimiter, type RateLimitResult } from "./rateLimit.js";
 export { getDb } from "./db.js";
@@ -39,7 +40,7 @@ export {
   planQueries,
 } from "./planning/queryPlanner.js";
 export { normalizeAndDedupe, rankAndDiversify } from "./ranking/rank.js";
-export { createCoreFromEnv, type CreateCoreOptions } from "./factory.js";
+export { createCoreFromEnv, createSearchCoreFromEnv, type CreateCoreOptions } from "./factory.js";
 
 const DEFAULT_LIMIT: Record<"quick" | "standard" | "deep", number> = {
   quick: 25,

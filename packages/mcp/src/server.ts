@@ -2,7 +2,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { createCoreFromEnv, ReadditError, checkConfig, loadEnvFile } from "@readdit/core";
+import {
+  createCoreFromEnv,
+  createSearchCoreFromEnv,
+  ReadditError,
+  checkConfig,
+  loadEnvFile,
+} from "@readdit/core";
 import type { NormalizedDiscussion } from "@readdit/core";
 
 loadEnvFile();
@@ -77,7 +83,7 @@ const freshSchema = z
 const modelSchema = z
   .string()
   .optional()
-  .describe("Override the OpenRouter model used for analysis, e.g. 'anthropic/claude-sonnet-4.5'.");
+  .describe("Override the Gemini model used for analysis, e.g. 'gemini-2.5-flash'.");
 const depthSchema = z
   .enum(["quick", "standard", "deep"])
   .optional()
@@ -104,8 +110,7 @@ server.registerTool(
   },
   async ({ query, limit, fresh, depth }) => {
     try {
-      requireConfig();
-      const core = createCoreFromEnv({});
+      const core = createSearchCoreFromEnv({});
       const { discussions, queriesUsed } = await core.search(query, { limit, fresh, depth });
       return jsonResult({
         query,
