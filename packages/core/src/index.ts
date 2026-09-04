@@ -97,7 +97,9 @@ export class ReadditCore {
       requestId,
       topic,
       intent,
-      queries: plan.queries.length,
+      queryCount: plan.queries.length,
+      queries: plan.queries,
+      reasoning: plan.reasoning,
     });
 
     options.onProgress?.("searching", `Searching Reddit (${plan.queries.length} queries)`);
