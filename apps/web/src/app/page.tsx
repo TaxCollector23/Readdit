@@ -15,9 +15,10 @@ export default function LandingPage() {
               Reddit + read it
             </p>
             <h1 className="mt-5 text-5xl font-semibold leading-[1.08] text-ink sm:text-7xl">
-              See what people are saying about{" "}
-              <span className="text-ink">Your </span>
-              <TypingPhrase />
+              See what people are saying about your
+              <span className="block">
+                <TypingPhrase />
+              </span>
             </h1>
             <p className="mt-7 max-w-xl text-base leading-7 text-muted">
               Readdit searches Reddit, finds the real discussions, and turns them into a clear,

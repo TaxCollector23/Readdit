@@ -3,15 +3,16 @@
   "version": "0.1.0",
   "description": "Readdit reads Reddit so you don't have to. CLI for evidence-backed Reddit research.",
   "type": "module",
-  "bin": {
-    "readdit": "./dist/bin.js"
-  },
+  "bin": "dist/bin.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo 'no-op'",
     "start": "node dist/bin.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@readdit/core": "workspace:*",

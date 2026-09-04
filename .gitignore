@@ -17,3 +17,4 @@ data/
 .turbo/
 next-env.d.ts
 *.tsbuildinfo
+.vercel

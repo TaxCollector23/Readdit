@@ -7,7 +7,6 @@ import { useSearchParams } from "next/navigation";
 import { ArrowRight, Loader2, X } from "lucide-react";
 import type { CompareReport, RedditReport } from "@readdit/core";
 import { CompareReportView, ReportView } from "./ReportView";
-import { SearchResultsView, type SourceSearchResponse } from "./SearchResultsView";
 import { useAuth } from "./AuthProvider";
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -54,7 +53,7 @@ async function* readNdjson(res: Response): AsyncGenerator<StreamEvent> {
 }
 
 export function PlaygroundClient({ aiConfigured }: { aiConfigured: boolean }) {
-  const { user, idToken } = useAuth();
+  const { user, loading: authLoading, idToken } = useAuth();
   const isAuthed = Boolean(user);
   const searchParams = useSearchParams();
 
@@ -63,7 +62,6 @@ export function PlaygroundClient({ aiConfigured }: { aiConfigured: boolean }) {
   const [stage, setStage] = useState<string | null>(null);
   const [report, setReport] = useState<RedditReport | null>(null);
   const [compareReport, setCompareReport] = useState<CompareReport | null>(null);
-  const [sourceResults, setSourceResults] = useState<SourceSearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -72,36 +70,18 @@ export function PlaygroundClient({ aiConfigured }: { aiConfigured: boolean }) {
   const run = useCallback(
     async (q: string) => {
       const trimmed = q.trim();
-      if (!trimmed) return;
+      if (!trimmed || !isAuthed) return;
 
       setLoading(true);
       setError(null);
       setNeedsAuth(false);
       setReport(null);
       setCompareReport(null);
-      setSourceResults(null);
 
       const controller = new AbortController();
       abortRef.current = controller;
 
       try {
-        if (!isAuthed || !aiConfigured) {
-          // Source search — no auth required
-          setStage("searching");
-          const res = await fetch(`${BASE}/api/search`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: trimmed, limit: 20 }),
-            signal: controller.signal,
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) { setError(data.error ?? "Search failed."); return; }
-          setSourceResults(data as SourceSearchResponse);
-          if (!isAuthed) setNeedsAuth(true);
-          return;
-        }
-
-        // Full AI analysis
         setStage("planning");
         const token = await idToken();
         if (!token) { setNeedsAuth(true); return; }
@@ -109,7 +89,7 @@ export function PlaygroundClient({ aiConfigured }: { aiConfigured: boolean }) {
         const res = await fetch(`${BASE}/api/analyze`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ query: trimmed, intent: "ask", limit: 50 }),
+          body: JSON.stringify({ query: trimmed, intent: "ask", limit: 25 }),
           signal: controller.signal,
         });
 
@@ -152,7 +132,35 @@ export function PlaygroundClient({ aiConfigured }: { aiConfigured: boolean }) {
   }
 
   const loginHref = `/login?callbackUrl=${encodeURIComponent(`/playground?q=${encodeURIComponent(query)}&auto=1`)}`;
-  const hasOutput = Boolean(report || compareReport || sourceResults);
+  const hasOutput = Boolean(report || compareReport);
+
+  // Show loading spinner while Firebase resolves auth state
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-accent" />
+      </div>
+    );
+  }
+
+  // Full sign-in wall — nothing is visible or interactive until logged in
+  if (!isAuthed) {
+    return (
+      <div className="border border-dashed border-border bg-surface px-5 py-14 text-center">
+        <p className="text-base font-semibold text-ink">Sign in to use the playground</p>
+        <p className="mt-2 text-sm text-muted">
+          Create a free account to search Reddit and get cited AI reports.
+        </p>
+        <Link
+          href={loginHref}
+          className="mt-6 inline-flex items-center gap-2 bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-ink"
+        >
+          Sign in with Google
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -180,7 +188,7 @@ export function PlaygroundClient({ aiConfigured }: { aiConfigured: boolean }) {
               disabled={!query.trim()}
               className="inline-flex h-12 items-center gap-2 bg-ink px-5 text-sm font-semibold text-canvas hover:bg-accent disabled:opacity-40"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+              <ArrowRight className="h-4 w-4" />
               Research it
             </button>
           )}
@@ -207,13 +215,11 @@ export function PlaygroundClient({ aiConfigured }: { aiConfigured: boolean }) {
         </div>
       )}
 
-      {!loading && !hasOutput && !error && !needsAuth && query.length === 0 && (
+      {!loading && !hasOutput && !error && query.length === 0 && (
         <div className="mt-8 border border-dashed border-border bg-surface px-5 py-10 text-center">
           <p className="text-sm font-medium text-ink">Type a product or brand above.</p>
           <p className="mt-2 text-sm text-muted">
-            {isAuthed
-              ? "Readdit will search Reddit and generate a cited AI report."
-              : "You'll see real Reddit threads. Sign in for the full AI report."}
+            Readdit will search Reddit and generate a cited AI report.
           </p>
         </div>
       )}
@@ -224,23 +230,6 @@ export function PlaygroundClient({ aiConfigured }: { aiConfigured: boolean }) {
         </div>
       )}
 
-      {needsAuth && !isAuthed && sourceResults && (
-        <div className="mt-6 border border-accent/30 bg-accent/5 px-4 py-4 text-sm">
-          <p className="font-medium text-ink">Sign in to get the full AI report.</p>
-          <p className="mt-1 text-xs leading-5 text-muted">
-            Below are the Reddit sources. Sign in and Readdit will read each one and synthesize a cited analysis.
-          </p>
-          <Link
-            href={loginHref}
-            className="mt-3 inline-flex items-center gap-2 bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-ink"
-          >
-            Sign in with Google
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      )}
-
-      {sourceResults && <SearchResultsView data={sourceResults} />}
       {report && (
         <div className="mt-8 border border-border bg-surface p-4 sm:p-6">
           <ReportView report={report} />

@@ -13,18 +13,22 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#0a0a0b",
+          background: "#ff4500",
           borderRadius: 6,
         }}
       >
-        <div
+        <span
           style={{
-            width: 14,
-            height: 14,
-            borderRadius: "50%",
-            background: "#ff4500",
+            color: "#ffffff",
+            fontSize: 18,
+            fontWeight: 800,
+            fontFamily: "sans-serif",
+            letterSpacing: "-1px",
+            lineHeight: 1,
           }}
-        />
+        >
+          r/
+        </span>
       </div>
     ),
     { ...size }

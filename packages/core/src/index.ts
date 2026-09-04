@@ -24,6 +24,8 @@ export { loadConfig, checkConfig, type ReadditConfig } from "./config.js";
 export { SqliteCacheProvider, MemoryCacheProvider, cacheKey } from "./cache/index.js";
 export { RedditSearchProvider } from "./search/redditProvider.js";
 export { DuckDuckGoSearchProvider } from "./search/duckduckgo.js";
+export { BingSearchProvider } from "./search/bingProvider.js";
+export { PullpushCommentProvider } from "./search/pullpushCommentProvider.js";
 export { CompositeSearchProvider } from "./search/compositeProvider.js";
 export { MockSearchProvider } from "./search/mockProvider.js";
 export { GeminiAnalysisProvider } from "./analysis/geminiProvider.js";
