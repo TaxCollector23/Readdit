@@ -34,8 +34,8 @@ https://reddit.com/r/cursor/...`;
 const MCP_CONFIG = `{
   "mcpServers": {
     "readdit": {
-      "command": "npx",
-      "args": ["-y", "@readdit/mcp"],
+      "command": "node",
+      "args": ["/path/to/readdit/packages/mcp/dist/server.js"],
       "env": { "OPENROUTER_API_KEY": "sk-or-..." }
     }
   }
@@ -107,7 +107,7 @@ export default function LandingPage() {
             {CLI_EXAMPLE}
           </pre>
           <p className="mt-4 font-mono text-xs text-muted">
-            npm install -g readdit-cli &nbsp;·&nbsp; readdit compare &quot;Cursor&quot;
+            git clone + pnpm install &nbsp;·&nbsp; readdit compare &quot;Cursor&quot;
             &quot;Claude Code&quot; &nbsp;·&nbsp; readdit --json
           </p>
         </section>
