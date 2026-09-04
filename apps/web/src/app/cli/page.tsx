@@ -4,18 +4,13 @@ import { ArrowLeft, Terminal } from "lucide-react";
 
 export const metadata = { title: "CLI - Readdit" };
 
-const CODE_BLOCKS = [
-  { label: "Install", code: "npm install -g readdit-cli" },
+const COMMANDS = [
   { label: "Analyze a product", code: 'readdit analyze "Cursor"' },
   { label: "Compare two products", code: 'readdit compare "Cursor" "Claude Code"' },
   { label: "Find complaints", code: 'readdit complaints "Vercel" --json' },
-  { label: "Search sources only", code: 'readdit search "Linear app"' },
+  { label: "Ask a question", code: 'readdit ask "Is Supabase production-ready?"' },
+  { label: "Search (no login needed)", code: 'readdit search "Linear app"' },
 ];
-
-const ENV_BLOCK = `# Add to your shell profile or .env file
-export GEMINI_API_KEY="your_api_key_here"
-export REDDIT_CLIENT_ID="your_reddit_client_id"
-export REDDIT_CLIENT_SECRET="your_reddit_client_secret"`;
 
 export default function CliPage() {
   return (
@@ -36,52 +31,39 @@ export default function CliPage() {
         </div>
         <h1 className="mt-3 text-3xl font-semibold text-ink">Readdit CLI</h1>
         <p className="mt-3 max-w-xl text-sm leading-7 text-muted">
-          Run Reddit research from the terminal. Get full reports, find complaints, or compare
-          products — all from the command line.
+          Run Reddit research from the terminal. No API keys, no Reddit app — just install, sign
+          in, and go.
         </p>
 
-        {/* Install */}
+        {/* Two commands to get started */}
         <section className="mt-10">
-          <h2 className="mb-4 text-base font-semibold text-ink">Install</h2>
-          <div className="bg-[#111110] text-[#f3f3ee]">
-            <pre className="overflow-x-auto p-5 font-mono text-sm leading-6">npm install -g readdit-cli</pre>
+          <h2 className="mb-4 text-base font-semibold text-ink">Two commands to get started</h2>
+          <div className="space-y-2">
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase text-muted">1. Install</p>
+              <div className="bg-[#111110] text-[#f3f3ee]">
+                <pre className="overflow-x-auto p-4 font-mono text-sm">npm install -g readdit-cli</pre>
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase text-muted">
+                2. Sign in (opens browser, Google sign-in)
+              </p>
+              <div className="bg-[#111110] text-[#f3f3ee]">
+                <pre className="overflow-x-auto p-4 font-mono text-sm">readdit login</pre>
+              </div>
+            </div>
           </div>
-        </section>
-
-        {/* Setup */}
-        <section className="mt-8">
-          <h2 className="mb-1 text-base font-semibold text-ink">Setup</h2>
-          <p className="mb-4 text-sm text-muted">
-            Get a free{" "}
-            <a
-              href="https://aistudio.google.com/apikey"
-              target="_blank"
-              rel="noreferrer"
-              className="text-accent hover:underline"
-            >
-              Gemini API key from Google AI Studio
-            </a>{" "}
-            and a{" "}
-            <a
-              href="https://www.reddit.com/prefs/apps"
-              target="_blank"
-              rel="noreferrer"
-              className="text-accent hover:underline"
-            >
-              Reddit app
-            </a>{" "}
-            (Script type, free). Then set:
+          <p className="mt-4 text-sm text-muted">
+            That&apos;s it. No API key, no Reddit app, no environment variables.
           </p>
-          <div className="bg-[#111110] text-[#f3f3ee]">
-            <pre className="overflow-x-auto p-5 font-mono text-xs leading-6">{ENV_BLOCK}</pre>
-          </div>
         </section>
 
         {/* Commands */}
-        <section className="mt-8">
+        <section className="mt-10">
           <h2 className="mb-4 text-base font-semibold text-ink">Commands</h2>
           <div className="space-y-3">
-            {CODE_BLOCKS.slice(1).map(({ label, code }) => (
+            {COMMANDS.map(({ label, code }) => (
               <div key={label}>
                 <p className="mb-1.5 text-xs font-medium uppercase text-muted">{label}</p>
                 <div className="bg-[#111110] text-[#f3f3ee]">
@@ -90,9 +72,13 @@ export default function CliPage() {
               </div>
             ))}
           </div>
+          <p className="mt-4 text-sm text-muted">
+            <code className="text-accent">search</code> works without login — all other commands
+            require a free Readdit account.
+          </p>
         </section>
 
-        {/* Output */}
+        {/* What you get */}
         <section className="mt-8 border border-border bg-surface p-5">
           <h2 className="mb-2 text-sm font-semibold text-ink">What you get</h2>
           <ul className="space-y-1.5 text-sm leading-6 text-muted">
@@ -110,10 +96,7 @@ export default function CliPage() {
           >
             Try it in the browser instead
           </Link>
-          <Link
-            href="/mcp"
-            className="text-sm text-muted hover:text-ink"
-          >
+          <Link href="/mcp" className="text-sm text-muted hover:text-ink">
             MCP for AI editors →
           </Link>
         </div>

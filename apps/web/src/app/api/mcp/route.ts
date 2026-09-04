@@ -17,12 +17,21 @@ interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 function ok(id: number | string | null | undefined, result: unknown) {
-  return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
+  return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result }, { headers: CORS_HEADERS });
 }
 
 function err(id: number | string | null | undefined, code: number, message: string) {
-  return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
+  return NextResponse.json(
+    { jsonrpc: "2.0", id: id ?? null, error: { code, message } },
+    { headers: CORS_HEADERS }
+  );
 }
 
 function textContent(text: string) {
@@ -75,6 +84,10 @@ const TOOLS = [
   },
 ];
 
+export async function OPTIONS() {
+  return new Response(null, { status: 200, headers: CORS_HEADERS });
+}
+
 export async function POST(req: Request) {
   let body: JsonRpcRequest;
   try {
@@ -94,7 +107,7 @@ export async function POST(req: Request) {
   }
 
   if (method === "notifications/initialized") {
-    return new Response(null, { status: 204 });
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
   if (method === "tools/list") {
@@ -172,11 +185,14 @@ export async function POST(req: Request) {
 
 // Allow GET for health check / discovery
 export async function GET() {
-  return NextResponse.json({
-    name: "readdit",
-    version: "0.1.0",
-    description: "Reddit research MCP server — paste this URL into Claude.ai → Integrations",
-    transport: "http",
-    tools: TOOLS.map((t) => t.name),
-  });
+  return NextResponse.json(
+    {
+      name: "readdit",
+      version: "0.1.0",
+      description: "Reddit research MCP server — paste this URL into Claude.ai → Integrations",
+      transport: "http",
+      tools: TOOLS.map((t) => t.name),
+    },
+    { headers: CORS_HEADERS }
+  );
 }

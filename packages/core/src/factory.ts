@@ -8,6 +8,10 @@ import { PullpushCommentProvider } from "./search/pullpushCommentProvider.js";
 import { HNSearchProvider } from "./search/hnSearchProvider.js";
 import { DuckDuckGoSearchProvider } from "./search/duckduckgo.js";
 import { BingSearchProvider } from "./search/bingProvider.js";
+import { LemmyProvider } from "./search/lemmyProvider.js";
+import { DevtoProvider } from "./search/devtoProvider.js";
+import { SearXNGProvider } from "./search/searxngProvider.js";
+import { StackExchangeProvider } from "./search/stackExchangeProvider.js";
 import { CompositeSearchProvider } from "./search/compositeProvider.js";
 import { MockSearchProvider } from "./search/mockProvider.js";
 import { GeminiAnalysisProvider } from "./analysis/geminiProvider.js";
@@ -49,6 +53,12 @@ function buildSearchProvider(requestId?: string): SearchProvider {
   providers.push(new HNSearchProvider(requestId));
   providers.push(new DuckDuckGoSearchProvider(config.userAgent, requestId));
   providers.push(new BingSearchProvider(config.userAgent, requestId));
+
+  // Niche coverage providers — all free, no keys
+  providers.push(new LemmyProvider(requestId));
+  providers.push(new DevtoProvider(requestId));
+  providers.push(new SearXNGProvider(requestId));
+  providers.push(new StackExchangeProvider(requestId));
 
   return new CompositeSearchProvider(providers, requestId);
 }

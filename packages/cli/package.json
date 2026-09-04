@@ -1,6 +1,6 @@
 {
   "name": "readdit-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Readdit reads Reddit so you don't have to. CLI for evidence-backed Reddit research.",
   "type": "module",
   "bin": "dist/bin.js",
