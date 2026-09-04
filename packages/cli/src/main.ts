@@ -243,37 +243,59 @@ function globalOpts(): GlobalOpts {
   return program.opts<GlobalOpts>();
 }
 
+const GLOBAL_OPTS_HELP = `
+Global options (pass anywhere, e.g. before the subcommand):
+  --json | --limit <n> | --model <model> | --fresh | --depth <depth> | --verbose | --quiet | --no-color
+
+Examples:`;
+
 program
   .command("analyze <query>")
+  .alias("a")
   .description("Full evidence-backed Reddit analysis of a topic")
+  .addHelpText(
+    "after",
+    `${GLOBAL_OPTS_HELP}\n  $ readdit analyze "Cursor"\n  $ readdit analyze "Cursor" --json --limit 50`
+  )
   .action(async (query: string) => {
     await execute(() => runAnalyze(query, "analyze", globalOpts()));
   });
 
 program
   .command("compare <topicA> <topicB>")
+  .alias("c")
   .description("Compare how Reddit discusses two products/topics")
+  .addHelpText(
+    "after",
+    `${GLOBAL_OPTS_HELP}\n  $ readdit compare "Cursor" "Claude Code"`
+  )
   .action(async (topicA: string, topicB: string) => {
     await execute(() => runCompare(topicA, topicB, globalOpts()));
   });
 
 program
   .command("complaints <query>")
+  .alias("co")
   .description("Strongest recurring complaints about a topic, with evidence")
+  .addHelpText("after", `${GLOBAL_OPTS_HELP}\n  $ readdit complaints "Vercel"`)
   .action(async (query: string) => {
     await execute(() => runAnalyze(query, "complaints", globalOpts()));
   });
 
 program
   .command("features <query>")
+  .alias("f")
   .description("Recurring feature requests / missing functionality")
+  .addHelpText("after", `${GLOBAL_OPTS_HELP}\n  $ readdit features "OpenWebUI"`)
   .action(async (query: string) => {
     await execute(() => runAnalyze(query, "features", globalOpts()));
   });
 
 program
   .command("sentiment <query>")
+  .alias("sent")
   .description("Overall Reddit sentiment toward a topic")
+  .addHelpText("after", `${GLOBAL_OPTS_HELP}\n  $ readdit sentiment "Qwen"`)
   .action(async (query: string) => {
     await execute(() => runAnalyze(query, "sentiment", globalOpts()));
   });
@@ -281,26 +303,86 @@ program
 program
   .command("ask <question>")
   .description('Ask a natural-language question, e.g. "Why are people leaving Cursor?"')
+  .addHelpText(
+    "after",
+    `${GLOBAL_OPTS_HELP}\n  $ readdit ask "Why are people leaving Cursor?"`
+  )
   .action(async (question: string) => {
     await execute(() => runAsk(question, globalOpts()));
   });
 
 program
   .command("search <query>")
+  .alias("se")
   .description("Retrieve and rank Reddit discussions without LLM synthesis (source-only mode)")
+  .addHelpText("after", `${GLOBAL_OPTS_HELP}\n  $ readdit search "RTX 5070 Ti" --limit 30`)
   .action(async (query: string) => {
     await execute(() => runSearch(query, globalOpts()));
   });
 
+program.addHelpText(
+  "after",
+  `
+Examples:
+  $ readdit "Cursor"                                  (shorthand for analyze)
+  $ readdit analyze "Cursor" --json
+  $ readdit compare "Cursor" "Claude Code"
+  $ readdit complaints "Vercel"
+  $ readdit ask "Why are people leaving Cursor?"
+  $ readdit "Cursor" --fresh --depth deep
+
+Readdit. It reads Reddit.`
+);
+
+async function readStdinIfPiped(): Promise<string | undefined> {
+  if (process.stdin.isTTY) return undefined;
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  const text = Buffer.concat(chunks).toString("utf8").trim();
+  return text.length > 0 ? text : undefined;
+}
+
+async function runInteractive(opts: GlobalOpts): Promise<void> {
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+  process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it, interactively.")}\n\n`);
+  process.stdout.write(theme.dim('Type a topic or question, or "exit" to quit.\n\n'));
+
+  try {
+    while (true) {
+      const query = (await rl.question(theme.cyan("readdit> "))).trim();
+      if (!query || query === "exit" || query === "quit") break;
+      process.stdout.write("\n");
+      await execute(() => runAnalyze(query, "analyze", opts));
+      process.exitCode = 0; // one failed query in a REPL shouldn't taint the session's exit code
+      process.stdout.write("\n");
+    }
+  } finally {
+    rl.close();
+  }
+}
+
 // Shorthand: `readdit "Cursor"` behaves like `readdit analyze "Cursor"`.
+// With no query at all: read a piped stdin query if present, otherwise (on
+// a TTY) drop into a small interactive research session.
 program
   .argument("[query]", "topic to research (shorthand for `analyze`)")
   .action(async (query: string | undefined) => {
-    if (!query) {
-      program.help();
+    if (query) {
+      await execute(() => runAnalyze(query, "analyze", globalOpts()));
       return;
     }
-    await execute(() => runAnalyze(query, "analyze", globalOpts()));
+    const piped = await readStdinIfPiped();
+    if (piped) {
+      await execute(() => runAnalyze(piped, "analyze", globalOpts()));
+      return;
+    }
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      await runInteractive(globalOpts());
+      return;
+    }
+    program.help();
   });
 
 async function execute(fn: () => Promise<void>): Promise<void> {

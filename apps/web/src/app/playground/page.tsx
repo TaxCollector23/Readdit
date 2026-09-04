@@ -1,13 +1,17 @@
 import { Suspense } from "react";
 import { Header } from "@/components/Header";
 import { PlaygroundClient } from "@/components/PlaygroundClient";
+import { RecentSearches } from "@/components/RecentSearches";
 import { auth } from "@/lib/auth";
+import { getSearchHistory } from "@/lib/db";
 
 export const metadata = { title: "Playground — Readdit" };
 
 export default async function PlaygroundPage() {
   const session = await auth();
-  const isAuthed = Boolean((session?.user as { id?: string } | undefined)?.id);
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  const isAuthed = Boolean(userId);
+  const history = userId ? getSearchHistory(userId, 8) : [];
 
   return (
     <>
@@ -25,6 +29,8 @@ export default async function PlaygroundPage() {
             <PlaygroundClient isAuthed={isAuthed} />
           </Suspense>
         </div>
+
+        <RecentSearches history={history} />
       </main>
     </>
   );

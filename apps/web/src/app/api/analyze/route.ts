@@ -1,4 +1,4 @@
-import { createCoreFromEnv, InvalidInputError, ReadditError, type ProgressStage } from "@readdit/core";
+import { createCoreFromEnv, ReadditError, type ProgressStage } from "@readdit/core";
 import { requireAuthedAndWithinLimit } from "@/lib/readditServer";
 import { recordSearchHistory } from "@/lib/db";
 import { NextResponse } from "next/server";
@@ -68,8 +68,6 @@ export async function POST(req: Request) {
       } catch (err) {
         if (err instanceof ReadditError) {
           controller.enqueue(sseLine({ type: "error", error: err.message, code: err.code }));
-        } else if (err instanceof InvalidInputError) {
-          controller.enqueue(sseLine({ type: "error", error: err.message, code: "invalid_input" }));
         } else {
           controller.enqueue(
             sseLine({ type: "error", error: "Something went wrong while researching that.", code: "unknown_error" })

@@ -84,7 +84,11 @@ export function normalizeAndDedupe(
   topic: string,
   raw: SearchResult[]
 ): NormalizedDiscussion[] {
-  const byId = new Map<string, NormalizedDiscussion>();
+  // Pass 1: merge duplicate raw results (by canonical URL, or by
+  // subreddit+title) into a single raw SearchResult per id. Score
+  // computation is deferred to pass 2 so it always reflects the *final*
+  // merged content, not whichever duplicate happened to be seen first.
+  const byId = new Map<string, SearchResult & { id: string }>();
   const seenTitleSub = new Set<string>();
 
   for (const r of raw) {
@@ -96,28 +100,26 @@ export function normalizeAndDedupe(
       .slice(0, 80)}`;
 
     if (byId.has(id)) {
-      // Merge: prefer the entry with more metadata / longer text.
       const existing = byId.get(id)!;
       if ((r.text?.length ?? 0) > (existing.text?.length ?? 0)) {
-        byId.set(id, { ...existing, ...r, id, isReddit: existing.isReddit });
+        byId.set(id, { ...existing, ...r, id });
       }
       continue;
     }
     if (seenTitleSub.has(titleSubKey) && titleSubKey !== "::") continue;
     seenTitleSub.add(titleSubKey);
 
-    const discussion: NormalizedDiscussion = {
-      ...r,
-      id,
-      isReddit: isRedditUrl(r.url),
-      relevanceScore: relevanceScore(topic, r),
-      qualityScore: qualityScore(r),
-      ageInDays: ageInDays(r.timestamp),
-    };
-    byId.set(id, discussion);
+    byId.set(id, { ...r, id });
   }
 
-  return Array.from(byId.values());
+  // Pass 2: compute scores once per final merged record.
+  return Array.from(byId.values()).map((r) => ({
+    ...r,
+    isReddit: isRedditUrl(r.url),
+    relevanceScore: relevanceScore(topic, r),
+    qualityScore: qualityScore(r),
+    ageInDays: ageInDays(r.timestamp),
+  }));
 }
 
 /**
@@ -161,6 +163,7 @@ export function rankAndDiversify(
   });
 
   const diversified: NormalizedDiscussion[] = [];
+  const takenPerSubreddit = new Map<string, number>();
   let cursor = 0;
   const maxPerSubreddit = Math.max(3, Math.ceil(limit / Math.max(subredditOrder.length, 1)) + 2);
 
@@ -169,17 +172,34 @@ export function rankAndDiversify(
     for (const sub of subredditOrder) {
       if (diversified.length >= limit) break;
       const bucket = bySubreddit.get(sub)!;
-      const takenFromSub = diversified.filter((d) => (d.subreddit ?? "unknown") === sub).length;
+      const takenFromSub = takenPerSubreddit.get(sub) ?? 0;
       if (takenFromSub >= maxPerSubreddit) continue;
       const next = bucket.shift();
       if (next) {
         diversified.push(next.d);
+        takenPerSubreddit.set(sub, takenFromSub + 1);
         addedThisPass = true;
       }
     }
     if (!addedThisPass) break;
     cursor++;
     if (cursor > limit * 2) break;
+  }
+
+  // Backfill: the per-subreddit cap exists to prevent one community from
+  // monopolizing the *top* of the list, not to discard evidence outright.
+  // If skewed subreddit distribution left the diversified set short of the
+  // requested limit while other candidates remain (e.g. most discussions
+  // concentrated in one or two subreddits), fill the remainder from
+  // whatever's left, highest-scoring first.
+  if (diversified.length < limit) {
+    const leftovers = subredditOrder
+      .flatMap((sub) => bySubreddit.get(sub) ?? [])
+      .sort((a, b) => b.combined - a.combined);
+    for (const item of leftovers) {
+      if (diversified.length >= limit) break;
+      diversified.push(item.d);
+    }
   }
 
   return diversified;

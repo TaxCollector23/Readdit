@@ -107,9 +107,20 @@ export class OpenRouterClient {
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new AnalysisProviderError(
-          `OpenRouter request failed (${res.status}): ${text.slice(0, 300)}`
-        );
+        // Log the raw upstream body server-side for debugging, but never
+        // forward it verbatim to callers — this error message can reach a
+        // browser client via the web API's JSON error response, and an
+        // upstream error body is not vetted content.
+        logger.error("openrouter_request_failed", {
+          requestId: opts.requestId,
+          status: res.status,
+          body: text.slice(0, 500),
+        });
+        const hint =
+          res.status === 401 || res.status === 403
+            ? " Check OPENROUTER_API_KEY."
+            : "";
+        throw new AnalysisProviderError(`OpenRouter request failed (${res.status}).${hint}`);
       }
 
       const json = (await res.json()) as {

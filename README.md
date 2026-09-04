@@ -182,6 +182,10 @@ readdit ask "Why are people leaving Cursor?"
 readdit search "RTX 5070 Ti"                       # retrieval only, no LLM call
 ```
 
+Short aliases: `a` (analyze), `c` (compare), `co` (complaints), `f` (features), `sent`
+(sentiment), `se` (search). Pipe a query in (`echo "Cursor" | readdit`), or run `readdit` with
+no arguments on a real terminal for a small interactive session.
+
 Global options:
 
 ```
