@@ -8,6 +8,9 @@ import { ArrowRight, GitCompare, Loader2, Search, Sparkles, X } from "lucide-rea
 import type { CompareReport, RedditReport } from "@readdit/core";
 import { CompareReportView, ReportView } from "./ReportView";
 import { SearchResultsView, type SourceSearchResponse } from "./SearchResultsView";
+import { useAuth } from "./AuthProvider";
+
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 const SOURCE_EXAMPLES = ["Cursor", "Vercel pricing", "Linear", "OpenWebUI"];
 const ASK_EXAMPLES = [
@@ -136,12 +139,12 @@ function EmptyState({ mode }: { mode: Mode }) {
 }
 
 export function PlaygroundClient({
-  isAuthed,
   aiConfigured,
 }: {
-  isAuthed: boolean;
   aiConfigured: boolean;
 }) {
+  const { user, idToken } = useAuth();
+  const isAuthed = Boolean(user);
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<Mode>(() => initialMode(searchParams));
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
@@ -163,7 +166,7 @@ export function PlaygroundClient({
       if (!trimmed || (mode === "compare" && !second)) return;
 
       if (mode !== "sources" && !aiConfigured) {
-        setError("AI analysis needs GEMINI_API_KEY in .env.local. Source search is available now.");
+        setError("AI analysis needs GEMINI_API_KEY configured. Source search is available now.");
         setNeedsAuth(false);
         return;
       }
@@ -181,7 +184,7 @@ export function PlaygroundClient({
 
       try {
         if (mode === "sources") {
-          const res = await fetch("/api/search", {
+          const res = await fetch(`${BASE}/api/search`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ query: trimmed, limit: 20 }),
@@ -196,7 +199,13 @@ export function PlaygroundClient({
           return;
         }
 
-        const endpoint = mode === "compare" ? "/api/compare" : "/api/analyze";
+        const token = await idToken();
+        if (!token) {
+          setNeedsAuth(true);
+          return;
+        }
+
+        const endpoint = mode === "compare" ? `${BASE}/api/compare` : `${BASE}/api/analyze`;
         const payload =
           mode === "compare"
             ? { topicA: trimmed, topicB: second, limit: 50 }
@@ -204,7 +213,7 @@ export function PlaygroundClient({
 
         const res = await fetch(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
           body: JSON.stringify(payload),
           signal: controller.signal,
         });
@@ -243,7 +252,7 @@ export function PlaygroundClient({
         abortRef.current = null;
       }
     },
-    [aiConfigured, mode]
+    [aiConfigured, idToken, mode]
   );
 
   useEffect(() => {

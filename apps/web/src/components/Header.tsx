@@ -1,10 +1,13 @@
-import Link from "next/link";
-import { LogIn, Search } from "lucide-react";
-import { auth } from "@/lib/auth";
-import { SignOutButton } from "./SignOutButton";
+"use client";
 
-export async function Header() {
-  const session = await auth();
+import Link from "next/link";
+import { LogIn, LogOut, Search } from "lucide-react";
+import { useAuth } from "./AuthProvider";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+
+export function Header() {
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-canvas/90 backdrop-blur">
@@ -37,8 +40,14 @@ export async function Header() {
             </svg>
             GitHub
           </a>
-          {session?.user ? (
-            <SignOutButton />
+          {user ? (
+            <button
+              onClick={() => signOut(auth)}
+              className="inline-flex items-center gap-1.5 hover:text-ink"
+            >
+              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+              Sign out
+            </button>
           ) : (
             <Link
               href="/login"

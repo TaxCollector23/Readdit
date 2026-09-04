@@ -17,7 +17,7 @@ function sseLine(obj: unknown): Uint8Array {
 }
 
 export async function POST(req: Request) {
-  const gate = await requireAuthedAndWithinLimit();
+  const gate = await requireAuthedAndWithinLimit(req);
   if (!gate.ok) return gate.response;
 
   let body: CompareBody;

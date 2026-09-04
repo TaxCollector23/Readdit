@@ -4,7 +4,8 @@ import { useState, Suspense } from "react";
 import type { FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 function LoginFormInner() {
   const router = useRouter();
@@ -20,14 +21,14 @@ function LoginFormInner() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const res = await signIn("credentials", { email, password, redirect: false });
-    setLoading(false);
-    if (res?.error) {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      router.push(callbackUrl);
+    } catch {
       setError("Invalid email or password.");
-      return;
+    } finally {
+      setLoading(false);
     }
-    router.push(callbackUrl);
-    router.refresh();
   }
 
   return (
@@ -35,7 +36,7 @@ function LoginFormInner() {
       <div className="border border-border bg-surface p-5">
         <h1 className="text-xl font-semibold text-ink">Sign in</h1>
         <p className="mt-2 text-sm leading-6 text-muted">
-          Live AI analysis uses a local account for rate limiting. Source search is public.
+          Required to run live AI analysis. Source search is public.
         </p>
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <div>
@@ -64,7 +65,7 @@ function LoginFormInner() {
             disabled={loading}
             className="h-10 w-full bg-ink px-4 text-sm font-semibold text-canvas hover:bg-accent disabled:opacity-50"
           >
-            {loading ? "Signing in..." : "Sign in"}
+            {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
         <p className="mt-4 text-sm text-muted">

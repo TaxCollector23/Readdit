@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "./auth";
+import { verifyFirebaseToken } from "./firebaseAdmin";
 import { checkAnalysisRateLimit } from "./rateLimit";
 import { ReadditError, newRequestId, logger } from "@readdit/core";
 
@@ -8,21 +8,14 @@ export interface AuthedContext {
   requestId: string;
 }
 
-/**
- * Shared guard for every live-research API route: verifies the session
- * server-side (never trusting a client-supplied "isLoggedIn" flag) and
- * enforces the per-user rate limit before any search/LLM budget is spent.
- * Wrapped in try/catch so a session-decode or SQLite error still produces
- * the app's normal JSON error envelope instead of a framework-level 500.
- */
-export async function requireAuthedAndWithinLimit(): Promise<
-  { ok: true; ctx: AuthedContext } | { ok: false; response: NextResponse }
-> {
+export async function requireAuthedAndWithinLimit(
+  req: Request
+): Promise<{ ok: true; ctx: AuthedContext } | { ok: false; response: NextResponse }> {
   try {
-    const session = await auth();
-    const userId = (session?.user as { id?: string } | undefined)?.id;
+    const authHeader = req.headers.get("authorization") ?? "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
-    if (!userId) {
+    if (!token) {
       return {
         ok: false,
         response: NextResponse.json(
@@ -32,7 +25,18 @@ export async function requireAuthedAndWithinLimit(): Promise<
       };
     }
 
-    const limit = checkAnalysisRateLimit(userId);
+    const claims = await verifyFirebaseToken(token);
+    if (!claims) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "Invalid or expired session. Sign in again.", code: "unauthenticated" },
+          { status: 401 }
+        ),
+      };
+    }
+
+    const limit = checkAnalysisRateLimit(claims.uid);
     if (!limit.allowed) {
       return {
         ok: false,
@@ -47,7 +51,7 @@ export async function requireAuthedAndWithinLimit(): Promise<
       };
     }
 
-    return { ok: true, ctx: { userId, requestId: newRequestId() } };
+    return { ok: true, ctx: { userId: claims.uid, requestId: newRequestId() } };
   } catch (err) {
     logger.error("auth_gate_failed", {
       error: err instanceof Error ? err.message : String(err),
@@ -64,10 +68,7 @@ export async function requireAuthedAndWithinLimit(): Promise<
 
 export function readditErrorResponse(err: unknown): NextResponse {
   if (err instanceof ReadditError) {
-    return NextResponse.json(
-      { error: err.message, code: err.code },
-      { status: err.httpStatus }
-    );
+    return NextResponse.json({ error: err.message, code: err.code }, { status: err.httpStatus });
   }
   return NextResponse.json(
     { error: "Something went wrong while researching that.", code: "unknown_error" },

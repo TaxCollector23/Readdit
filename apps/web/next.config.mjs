@@ -36,22 +36,27 @@ function loadEnv(path, override, loadedByUs) {
       }
     }
   } catch {
-    // ignore — values may already be set in the environment.
+    // ignore
   }
 }
 
-// Next.js auto-loads env files from apps/web. Readdit also supports one
-// root-level .env/.env.local shared by the CLI, MCP server, and web app.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const loadedByUs = new Set();
 loadEnv(resolve(repoRoot, ".env"), false, loadedByUs);
 loadEnv(resolve(repoRoot, ".env.local"), true, loadedByUs);
+
+// basePath for sub-path deployments (e.g. rangan.xyz/projects/readdit)
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ["@readdit/core"],
   outputFileTracingRoot: repoRoot,
+  basePath,
+  env: {
+    NEXT_PUBLIC_BASE_PATH: basePath,
+  },
 };
 
 export default nextConfig;

@@ -4,7 +4,8 @@ import { Suspense, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 function SignupFormInner() {
   const router = useRouter();
@@ -19,29 +20,21 @@ function SignupFormInner() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-
-    const res = await fetch("/api/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
-
-    if (!res.ok) {
-      setError(data.error ?? "Something went wrong.");
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      router.push(callbackUrl);
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === "auth/email-already-in-use") {
+        setError("An account with that email already exists. Sign in instead.");
+      } else if (code === "auth/weak-password") {
+        setError("Password must be at least 6 characters.");
+      } else {
+        setError("Something went wrong. Try again.");
+      }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const signInRes = await signIn("credentials", { email, password, redirect: false });
-    setLoading(false);
-    if (signInRes?.error) {
-      setError("Account created - please sign in.");
-      router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
-      return;
-    }
-    router.push(callbackUrl);
-    router.refresh();
   }
 
   return (
@@ -49,7 +42,7 @@ function SignupFormInner() {
       <div className="border border-border bg-surface p-5">
         <h1 className="text-xl font-semibold text-ink">Create an account</h1>
         <p className="mt-2 text-sm leading-6 text-muted">
-          The account is local to this app and only gates AI-backed live analysis.
+          Required to run live AI analysis. Source search is public.
         </p>
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <div>
@@ -67,12 +60,11 @@ function SignupFormInner() {
             <input
               type="password"
               required
-              minLength={8}
+              minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="h-10 w-full border border-border bg-canvas px-3 text-sm text-ink outline-none focus:border-accent"
             />
-            <p className="mt-1 text-xs text-muted">At least 8 characters.</p>
           </div>
           {error && <p className="text-sm text-negative">{error}</p>}
           <button
@@ -80,7 +72,7 @@ function SignupFormInner() {
             disabled={loading}
             className="h-10 w-full bg-ink px-4 text-sm font-semibold text-canvas hover:bg-accent disabled:opacity-50"
           >
-            {loading ? "Creating account..." : "Create account"}
+            {loading ? "Creating account…" : "Create account"}
           </button>
         </form>
         <p className="mt-4 text-sm text-muted">

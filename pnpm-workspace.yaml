@@ -2,5 +2,7 @@ packages:
   - "packages/*"
   - "apps/*"
 allowBuilds:
+  '@firebase/util': set this to true or false
   better-sqlite3: true
+  protobufjs: set this to true or false
   unrs-resolver: false
