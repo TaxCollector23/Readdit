@@ -1,0 +1,25 @@
+{
+  "name": "@readdit/mcp",
+  "version": "0.1.0",
+  "description": "Readdit MCP server — evidence-backed Reddit research tools for AI agents.",
+  "type": "module",
+  "bin": {
+    "readdit-mcp": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo 'no-op'",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@readdit/core": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.6.3"
+  }
+}

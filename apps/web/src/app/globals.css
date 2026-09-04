@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  border-color: theme("colors.border");
+}
+
+html,
+body {
+  background: theme("colors.canvas");
+  color: theme("colors.ink");
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Helvetica, Arial,
+    sans-serif;
+}
+
+::selection {
+  background: theme("colors.accent");
+  color: #fff;
+}
+
+.prose-report a {
+  color: theme("colors.accent");
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.status-dot {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}

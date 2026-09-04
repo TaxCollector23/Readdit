@@ -1,0 +1,21 @@
+{
+  "name": "readdit-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Readdit reads Reddit so you don't have to.",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* build && pnpm --filter web build",
+    "build:core": "pnpm --filter @readdit/core build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "readdit": "pnpm --filter readdit-cli start --",
+    "dev:web": "pnpm --filter web dev",
+    "mcp": "pnpm --filter @readdit/mcp start"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

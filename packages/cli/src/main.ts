@@ -1,0 +1,320 @@
+import {
+  createCoreFromEnv,
+  checkConfig,
+  loadEnvFile,
+  ReadditError,
+  RateLimitedError,
+  type ReadditOptions,
+  type RedditReport,
+  type CompareReport,
+} from "@readdit/core";
+loadEnvFile();
+
+import { Command } from "commander";
+import { StatusReporter, theme, RULE } from "./ui/theme.js";
+import { formatCompareReport, formatReport } from "./ui/format.js";
+
+const program = new Command();
+
+program
+  .name("readdit")
+  .description(
+    "Readdit reads Reddit so you don't have to. Evidence-backed Reddit research from your terminal."
+  )
+  .version("0.1.0")
+  .option("--json", "output machine-readable JSON only (no decorative output)")
+  .option("--limit <number>", "max discussions to retrieve", parseIntOption)
+  .option("--model <model>", "OpenRouter model override, e.g. anthropic/claude-sonnet-4.5")
+  .option("--fresh", "bypass the cache and re-research")
+  .option("--verbose", "print diagnostic info on failure")
+  .option("--quiet", "suppress status lines")
+  .option("--no-color", "disable colored output")
+  .option("--depth <depth>", "research depth: quick | standard | deep");
+
+function parseIntOption(value: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error("must be a positive number");
+  }
+  return n;
+}
+
+interface GlobalOpts {
+  json?: boolean;
+  limit?: number;
+  model?: string;
+  fresh?: boolean;
+  verbose?: boolean;
+  quiet?: boolean;
+  color?: boolean;
+  depth?: "quick" | "standard" | "deep";
+}
+
+const PROGRESS_MESSAGES: Record<string, string> = {
+  planning: "Planning research...",
+  searching: "Searching Reddit...",
+  ranking: "Ranking relevant discussions...",
+  extracting_evidence: "Extracting evidence...",
+  synthesizing: "Synthesizing Reddit's opinions...",
+};
+
+function readditOptionsFrom(opts: GlobalOpts, status?: StatusReporter): ReadditOptions {
+  return {
+    limit: opts.limit,
+    model: opts.model,
+    fresh: opts.fresh,
+    depth: opts.depth,
+    onProgress: status
+      ? (stage, detail) => {
+          if (stage === "done") return;
+          status.step(detail ?? PROGRESS_MESSAGES[stage] ?? stage);
+        }
+      : undefined,
+  };
+}
+
+function exitCodeFor(err: unknown): number {
+  if (err instanceof ReadditError) {
+    switch (err.code) {
+      case "invalid_input":
+        return 2;
+      case "configuration_error":
+        return 3;
+      case "rate_limited":
+        return 5;
+      case "no_results":
+        return 1;
+      default:
+        return 1;
+    }
+  }
+  return 1;
+}
+
+function printError(err: unknown, opts: GlobalOpts): void {
+  const message = err instanceof Error ? err.message : String(err);
+
+  if (opts.json) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          error: true,
+          code: err instanceof ReadditError ? err.code : "unknown_error",
+          message,
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    return;
+  }
+
+  process.stderr.write(`\n${theme.red("Readdit couldn't finish that request.")}\n\n`);
+  process.stderr.write(`${message}\n`);
+
+  if (err instanceof ReadditError && err.code === "configuration_error") {
+    process.stderr.write(`\nAdd the missing variable(s) to your environment or a .env file.\n`);
+  }
+  if (err instanceof RateLimitedError && err.retryAfterSeconds) {
+    process.stderr.write(`\nRetry in about ${err.retryAfterSeconds}s.\n`);
+  }
+  if (!opts.verbose) {
+    process.stderr.write(`\nRun with --verbose for diagnostics.\n`);
+  } else if (err instanceof Error && err.stack) {
+    process.stderr.write(`\n${theme.dim(err.stack)}\n`);
+  }
+}
+
+function checkConfigOrExit(opts: GlobalOpts): void {
+  const { ok, missing } = checkConfig();
+  if (ok) return;
+  if (opts.json) {
+    process.stdout.write(
+      JSON.stringify(
+        { error: true, code: "configuration_error", message: "Readdit is not configured.", missing },
+        null,
+        2
+      ) + "\n"
+    );
+  } else {
+    process.stderr.write(`${theme.red("Readdit is not configured.")}\n\n`);
+    process.stderr.write("Missing:\n");
+    for (const m of missing) process.stderr.write(`  ${m}\n`);
+    process.stderr.write("\nAdd it to your environment or a .env file. See .env.example.\n");
+  }
+  process.exit(3);
+}
+
+async function runAnalyze(
+  topic: string,
+  method: "analyze" | "complaints" | "features" | "sentiment",
+  opts: GlobalOpts
+): Promise<void> {
+  checkConfigOrExit(opts);
+  const status = new StatusReporter(!opts.json && !opts.quiet);
+  if (!opts.json && !opts.quiet) {
+    process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it...")}\n\n`);
+  }
+
+  const core = createCoreFromEnv({ model: opts.model });
+  const report: RedditReport = await core[method](topic, readditOptionsFrom(opts, status));
+  status.done(`Analyzed ${report.sourceCount} discussions across ${report.subreddits.length} subreddits.`);
+  if (!opts.json && !opts.quiet) process.stdout.write("\n");
+
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  } else {
+    process.stdout.write(formatReport(report) + "\n");
+  }
+}
+
+async function runCompare(topicA: string, topicB: string, opts: GlobalOpts): Promise<void> {
+  checkConfigOrExit(opts);
+  const status = new StatusReporter(!opts.json && !opts.quiet);
+  if (!opts.json && !opts.quiet) {
+    process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it...")}\n\n`);
+  }
+
+  const core = createCoreFromEnv({ model: opts.model });
+  const report: CompareReport = await core.compare(
+    topicA,
+    topicB,
+    readditOptionsFrom(opts, status)
+  );
+  status.done(`Compared using ${report.sourceCount} discussions.`);
+  if (!opts.json && !opts.quiet) process.stdout.write("\n");
+
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  } else {
+    process.stdout.write(formatCompareReport(report) + "\n");
+  }
+}
+
+async function runAsk(question: string, opts: GlobalOpts): Promise<void> {
+  checkConfigOrExit(opts);
+  const status = new StatusReporter(!opts.json && !opts.quiet);
+  if (!opts.json && !opts.quiet) {
+    process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it...")}\n\n`);
+  }
+
+  const core = createCoreFromEnv({ model: opts.model });
+  const report = await core.ask(question, readditOptionsFrom(opts, status));
+  status.done(`Answered using ${report.sourceCount} discussions.`);
+  if (!opts.json && !opts.quiet) process.stdout.write("\n");
+
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  } else {
+    process.stdout.write(formatReport(report) + "\n");
+  }
+}
+
+async function runSearch(topic: string, opts: GlobalOpts): Promise<void> {
+  checkConfigOrExit(opts);
+  const status = new StatusReporter(!opts.json && !opts.quiet);
+  if (!opts.json && !opts.quiet) {
+    process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Searching, no analysis...")}\n\n`);
+  }
+
+  const core = createCoreFromEnv({ model: opts.model });
+  const { discussions, queriesUsed } = await core.search(topic, readditOptionsFrom(opts, status));
+
+  if (opts.json) {
+    process.stdout.write(JSON.stringify({ query: topic, queriesUsed, discussions }, null, 2) + "\n");
+    return;
+  }
+
+  process.stdout.write(`${theme.bold(topic)}\n${RULE}\n`);
+  process.stdout.write(theme.dim(`Queries: ${queriesUsed.join(" | ")}\n\n`));
+  for (const d of discussions) {
+    process.stdout.write(`${theme.cyan(d.title)}\n`);
+    process.stdout.write(
+      theme.dim(
+        `  r/${d.subreddit ?? "?"} · score ${d.score ?? "?"} · relevance ${d.relevanceScore.toFixed(2)}\n`
+      )
+    );
+    process.stdout.write(theme.dim(`  ${d.url}\n\n`));
+  }
+  process.stdout.write(theme.dim(`${discussions.length} discussions.\n`));
+}
+
+function globalOpts(): GlobalOpts {
+  return program.opts<GlobalOpts>();
+}
+
+program
+  .command("analyze <query>")
+  .description("Full evidence-backed Reddit analysis of a topic")
+  .action(async (query: string) => {
+    await execute(() => runAnalyze(query, "analyze", globalOpts()));
+  });
+
+program
+  .command("compare <topicA> <topicB>")
+  .description("Compare how Reddit discusses two products/topics")
+  .action(async (topicA: string, topicB: string) => {
+    await execute(() => runCompare(topicA, topicB, globalOpts()));
+  });
+
+program
+  .command("complaints <query>")
+  .description("Strongest recurring complaints about a topic, with evidence")
+  .action(async (query: string) => {
+    await execute(() => runAnalyze(query, "complaints", globalOpts()));
+  });
+
+program
+  .command("features <query>")
+  .description("Recurring feature requests / missing functionality")
+  .action(async (query: string) => {
+    await execute(() => runAnalyze(query, "features", globalOpts()));
+  });
+
+program
+  .command("sentiment <query>")
+  .description("Overall Reddit sentiment toward a topic")
+  .action(async (query: string) => {
+    await execute(() => runAnalyze(query, "sentiment", globalOpts()));
+  });
+
+program
+  .command("ask <question>")
+  .description('Ask a natural-language question, e.g. "Why are people leaving Cursor?"')
+  .action(async (question: string) => {
+    await execute(() => runAsk(question, globalOpts()));
+  });
+
+program
+  .command("search <query>")
+  .description("Retrieve and rank Reddit discussions without LLM synthesis (source-only mode)")
+  .action(async (query: string) => {
+    await execute(() => runSearch(query, globalOpts()));
+  });
+
+// Shorthand: `readdit "Cursor"` behaves like `readdit analyze "Cursor"`.
+program
+  .argument("[query]", "topic to research (shorthand for `analyze`)")
+  .action(async (query: string | undefined) => {
+    if (!query) {
+      program.help();
+      return;
+    }
+    await execute(() => runAnalyze(query, "analyze", globalOpts()));
+  });
+
+async function execute(fn: () => Promise<void>): Promise<void> {
+  const opts = program.opts<GlobalOpts>();
+  if (opts.verbose) process.env.READDIT_VERBOSE = "1";
+  try {
+    await fn();
+  } catch (err) {
+    printError(err, opts);
+    process.exitCode = exitCodeFor(err);
+  }
+}
+
+program.parseAsync(process.argv).catch((err) => {
+  printError(err, program.opts<GlobalOpts>());
+  process.exitCode = 1;
+});

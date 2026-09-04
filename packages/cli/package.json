@@ -1,0 +1,25 @@
+{
+  "name": "readdit-cli",
+  "version": "0.1.0",
+  "description": "Readdit reads Reddit so you don't have to. CLI for evidence-backed Reddit research.",
+  "type": "module",
+  "bin": {
+    "readdit": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo 'no-op'",
+    "start": "node dist/bin.js"
+  },
+  "dependencies": {
+    "@readdit/core": "workspace:*",
+    "commander": "^12.1.0",
+    "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.6.3"
+  }
+}
