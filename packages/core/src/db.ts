@@ -1,8 +1,33 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 const instances = new Map<string, DatabaseSync>();
+
+/**
+ * A relative DATABASE_URL (the documented default, e.g. "./data/readdit.db")
+ * needs to resolve to the SAME absolute file regardless of which package's
+ * directory a process happens to be launched from — otherwise the CLI, MCP
+ * server, and web app silently end up with three different SQLite files
+ * despite sharing one .env. Anchor relative paths to the monorepo root
+ * (nearest ancestor of cwd containing pnpm-workspace.yaml) when one can be
+ * found; otherwise fall back to plain cwd-relative resolution, so this
+ * still behaves sensibly for a standalone (non-monorepo) consumer.
+ */
+function resolveDataPath(path: string): string {
+  if (path === ":memory:" || isAbsolute(path)) return path;
+
+  let dir = process.cwd();
+  for (let i = 0; i < 8; i++) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) {
+      return resolve(dir, path);
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return resolve(path);
+}
 
 /**
  * Returns a shared SQLite handle for the given path, using Node's built-in
@@ -13,7 +38,7 @@ const instances = new Map<string, DatabaseSync>();
  * per the "do not overengineer" constraint for this MVP.
  */
 export function getDb(path: string): DatabaseSync {
-  const resolved = path === ":memory:" ? path : resolve(path);
+  const resolved = resolveDataPath(path);
   const existing = instances.get(resolved);
   if (existing) return existing;
 
