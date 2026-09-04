@@ -39,7 +39,7 @@ export function loadConfig(options: LoadConfigOptions = {}): ReadditConfig {
 
   return {
     geminiApiKey,
-    geminiModel: readEnv("GEMINI_MODEL") ?? "gemini-2.5-flash",
+    geminiModel: readEnv("GEMINI_MODEL") ?? "gemini-3.6-flash",
     databasePath: readEnv("DATABASE_URL") ?? "./data/readdit.db",
     cacheTtlSeconds: Number(readEnv("READDIT_CACHE_TTL_SECONDS") ?? 21600),
     userAgent:

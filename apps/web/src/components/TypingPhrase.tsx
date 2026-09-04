@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-const PHRASES = ["your website", "your business", "your product", "your brand"];
+const PHRASES = ["website", "product", "startup", "brand", "app"];
 
 export function TypingPhrase() {
   const longest = useMemo(
@@ -20,10 +20,7 @@ export function TypingPhrase() {
 
     const delay = atEnd && !deleting ? 1050 : atStart && deleting ? 180 : deleting ? 42 : 72;
     const timer = window.setTimeout(() => {
-      if (!deleting && atEnd) {
-        setDeleting(true);
-        return;
-      }
+      if (!deleting && atEnd) { setDeleting(true); return; }
       if (deleting && atStart) {
         setDeleting(false);
         setPhraseIndex((index) => (index + 1) % PHRASES.length);

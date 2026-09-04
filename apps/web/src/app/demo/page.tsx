@@ -1,43 +1,29 @@
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { Suspense } from "react";
+import { checkConfig } from "@readdit/core";
 import { Header } from "@/components/Header";
-import { ReportView } from "@/components/ReportView";
-import demoReport from "@/data/demo-cursor.json";
-import type { RedditReport } from "@readdit/core";
+import { PlaygroundClient } from "@/components/PlaygroundClient";
 
-export const metadata = {
-  title: "Example report - Readdit",
-};
+export const metadata = { title: "Demo - Readdit" };
 
 export default function DemoPage() {
-  const report = demoReport as unknown as RedditReport;
+  const aiConfigured = checkConfig({ requireAi: true }).ok;
 
   return (
     <>
       <Header />
-      <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
-        <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <p className="font-mono text-xs uppercase text-accent">Sample report</p>
-            <h1 className="mt-2 text-2xl font-semibold text-ink">
-              What does Reddit think about Cursor?
-            </h1>
-          </div>
-          <Link
-            href="/playground"
-            className="inline-flex items-center gap-2 bg-ink px-4 py-2.5 text-sm font-semibold text-canvas hover:bg-accent"
-          >
-            Run your own
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
-          </Link>
-        </div>
-        <p className="mb-8 border border-neutral/40 bg-neutral/10 px-4 py-3 text-xs leading-5 text-muted">
-          This is a sample report showing what Readdit&apos;s output looks like. The sources are
-          illustrative — use the playground to run a live search on any topic.
+      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-16">
+        <p className="font-mono text-xs uppercase tracking-widest text-accent">Live demo</p>
+        <h1 className="mt-2 text-2xl font-semibold text-ink">
+          Try it yourself — search anything
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          Results come straight from Reddit. Sign in to get the full AI synthesis.
         </p>
 
-        <div className="border border-border bg-surface p-4 sm:p-6">
-          <ReportView report={report} />
+        <div className="mt-8">
+          <Suspense>
+            <PlaygroundClient aiConfigured={aiConfigured} />
+          </Suspense>
         </div>
       </main>
     </>
