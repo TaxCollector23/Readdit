@@ -2,6 +2,7 @@ import { loadConfig } from "./config.js";
 import { SqliteCacheProvider, MemoryCacheProvider } from "./cache/index.js";
 import { RedditSearchProvider } from "./search/redditProvider.js";
 import { RedditOAuthProvider } from "./search/redditOAuthProvider.js";
+import { BraveSearchProvider } from "./search/braveSearchProvider.js";
 import { DuckDuckGoSearchProvider } from "./search/duckduckgo.js";
 import { CompositeSearchProvider } from "./search/compositeProvider.js";
 import { MockSearchProvider } from "./search/mockProvider.js";
@@ -13,7 +14,6 @@ import type { AnalysisProvider, SearchProvider } from "./types.js";
 export interface CreateCoreOptions {
   model?: string;
   requestId?: string;
-  /** Use in-memory cache instead of SQLite (useful for tests / serverless). */
   memoryCache?: boolean;
 }
 
@@ -22,19 +22,24 @@ function buildSearchProvider(requestId?: string): SearchProvider {
   const useMock = process.env.READDIT_MOCK_PROVIDERS === "1";
   if (useMock) return new MockSearchProvider();
 
-  const clientId = process.env.REDDIT_CLIENT_ID?.trim();
-  const clientSecret = process.env.REDDIT_CLIENT_SECRET?.trim();
+  const braveKey = process.env.BRAVE_SEARCH_API_KEY?.trim();
+  const redditClientId = process.env.REDDIT_CLIENT_ID?.trim();
+  const redditClientSecret = process.env.REDDIT_CLIENT_SECRET?.trim();
 
   const providers: SearchProvider[] = [];
 
-  if (clientId && clientSecret) {
-    // OAuth provider — works from any server IP
-    providers.push(new RedditOAuthProvider(clientId, clientSecret, config.userAgent, requestId));
+  if (braveKey) {
+    // Brave Search — works reliably from any server, no IP blocking
+    providers.push(new BraveSearchProvider(braveKey, requestId));
+  } else if (redditClientId && redditClientSecret) {
+    // Reddit OAuth — also bypasses IP blocking
+    providers.push(new RedditOAuthProvider(redditClientId, redditClientSecret, config.userAgent, requestId));
   } else {
-    // Fall back to public JSON API (may 403 on some server IPs)
+    // Public Reddit JSON API — may 403 from some server IPs
     providers.push(new RedditSearchProvider(config.userAgent, requestId));
   }
 
+  // DuckDuckGo as secondary signal (works on most server IPs)
   providers.push(new DuckDuckGoSearchProvider(config.userAgent, requestId));
 
   return new CompositeSearchProvider(providers, requestId);
@@ -45,25 +50,20 @@ function buildCache(memoryCache: boolean | undefined) {
   return memoryCache ? new MemoryCacheProvider() : new SqliteCacheProvider(config.databasePath);
 }
 
-/**
- * Builds a fully wired ReadditCore from environment configuration. This is
- * the single construction path shared by the CLI, MCP server, and web app.
- */
 export function createCoreFromEnv(opts: CreateCoreOptions = {}): ReadditCore {
   const config = loadConfig({ requireAi: true });
   const useMock = process.env.READDIT_MOCK_PROVIDERS === "1";
 
-  const searchProvider = buildSearchProvider(opts.requestId);
-  const analysisProvider: AnalysisProvider = useMock
-    ? new MockAnalysisProvider()
-    : new GeminiAnalysisProvider(config.geminiApiKey!, opts.model ?? config.geminiModel);
-
-  const cache = buildCache(opts.memoryCache);
-
-  return new ReadditCore({ searchProvider, analysisProvider, cache, cacheTtlSeconds: config.cacheTtlSeconds });
+  return new ReadditCore({
+    searchProvider: buildSearchProvider(opts.requestId),
+    analysisProvider: useMock
+      ? new MockAnalysisProvider()
+      : new GeminiAnalysisProvider(config.geminiApiKey!, opts.model ?? config.geminiModel),
+    cache: buildCache(opts.memoryCache),
+    cacheTtlSeconds: config.cacheTtlSeconds,
+  });
 }
 
-/** Builds a core instance suitable for retrieval-only APIs; no Gemini key required. */
 export function createSearchCoreFromEnv(opts: CreateCoreOptions = {}): ReadditCore {
   return new ReadditCore({
     searchProvider: buildSearchProvider(opts.requestId),
