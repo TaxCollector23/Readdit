@@ -1,28 +1,31 @@
+import { ExternalLink } from "lucide-react";
+import type { ReactNode } from "react";
 import type { CompareReport, RedditReport } from "@readdit/core";
 import { SentimentBadge } from "./SentimentBadge";
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="border-t border-border py-6 first:border-t-0 first:pt-0">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">{title}</h3>
+      <h3 className="mb-3 text-xs font-semibold uppercase text-muted">{title}</h3>
       {children}
     </section>
   );
 }
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function labelize(s: string): string {
+  const text = s.replace(/_/g, " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function BulletList({ items }: { items: string[] }) {
+function BulletList({ items, empty }: { items: string[]; empty?: string }) {
   if (items.length === 0) {
-    return <p className="text-sm text-muted">Nothing distinct found in the retrieved evidence.</p>;
+    return <p className="text-sm text-muted">{empty ?? "No distinct items found in the evidence."}</p>;
   }
   return (
     <ul className="space-y-2 text-sm leading-relaxed text-ink">
       {items.map((item, i) => (
         <li key={i} className="flex gap-2">
-          <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-muted" />
+          <span className="mt-2 h-1 w-1 shrink-0 bg-muted" />
           <span>{item}</span>
         </li>
       ))}
@@ -30,184 +33,208 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
+function SourceLinks({
+  evidence,
+}: {
+  evidence: Array<{ claim: string; sources: Array<{ url: string; title: string; subreddit?: string }> }>;
+}) {
+  if (evidence.length === 0) {
+    return <p className="text-sm text-muted">No cited evidence claims were returned.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {evidence.map((item, i) => (
+        <article key={`${item.claim}-${i}`} className="border border-border bg-canvas p-3">
+          <p className="text-sm font-medium leading-6 text-ink">{item.claim}</p>
+          <div className="mt-2 space-y-1.5">
+            {item.sources.map((source) => (
+              <a
+                key={source.url}
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="flex items-start gap-2 text-xs leading-5 text-muted hover:text-accent"
+              >
+                <ExternalLink className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                <span>
+                  {source.subreddit ? `r/${source.subreddit} - ` : ""}
+                  {source.title}
+                </span>
+              </a>
+            ))}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CorpusMeta({
+  sourceCount,
+  subredditCount,
+  model,
+  cached,
+}: {
+  sourceCount: number;
+  subredditCount: number;
+  model?: string;
+  cached?: boolean;
+}) {
+  return (
+    <p className="text-xs text-muted">
+      {sourceCount} discussion{sourceCount === 1 ? "" : "s"} / {subredditCount} subreddit
+      {subredditCount === 1 ? "" : "s"}
+      {model ? ` / model: ${model}` : ""}
+      {cached ? " / served from cache" : ""}
+    </p>
+  );
+}
+
 export function ReportView({ report }: { report: RedditReport }) {
   return (
-    <div className="prose-report">
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-6">
+    <div>
+      <div className="flex flex-wrap items-start justify-between gap-4 pb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest text-muted">Readdit report</p>
+          <p className="text-xs font-semibold uppercase text-muted">Readdit report</p>
           <h2 className="mt-1 text-2xl font-semibold text-ink">{report.query}</h2>
+          <CorpusMeta
+            sourceCount={report.sourceCount}
+            subredditCount={report.subreddits.length}
+            model={report.model}
+            cached={report.cached}
+          />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="space-y-2">
           <SentimentBadge sentiment={report.sentiment} />
-          <div className="text-xs text-muted">
-            <div>Confidence: {capitalize(report.confidence.level)}</div>
-            <div>
-              {report.sourceCount} discussions · {report.subreddits.length} subreddits
-            </div>
-          </div>
+          <p className="text-xs text-muted">Confidence: {labelize(report.confidence.level)}</p>
         </div>
       </div>
 
       <Section title="Summary">
-        <p className="text-sm leading-relaxed text-ink">{report.summary}</p>
+        <p className="text-sm leading-7 text-ink">{report.summary}</p>
       </Section>
 
-      {report.keyTakeaways.length > 0 && (
-        <Section title="Key takeaways">
-          <BulletList items={report.keyTakeaways} />
-        </Section>
-      )}
+      <Section title="Key Takeaways">
+        <BulletList items={report.keyTakeaways} />
+      </Section>
 
       <div className="grid gap-6 border-t border-border py-6 sm:grid-cols-2">
         <div>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-positive">
-            People like
-          </h3>
+          <h3 className="mb-3 text-xs font-semibold uppercase text-positive">People like</h3>
           <BulletList items={report.praise} />
         </div>
         <div>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-negative">
-            People dislike
-          </h3>
+          <h3 className="mb-3 text-xs font-semibold uppercase text-negative">People dislike</h3>
           <BulletList items={report.complaints} />
         </div>
       </div>
 
-      {report.featureRequests.length > 0 && (
-        <Section title="Feature requests">
-          <BulletList items={report.featureRequests} />
-        </Section>
-      )}
+      <Section title="Feature Requests">
+        <BulletList items={report.featureRequests} empty="No feature requests stood out." />
+      </Section>
 
-      {report.themes.length > 0 && (
-        <Section title="Top themes">
-          <ol className="space-y-2 text-sm text-ink">
-            {report.themes.slice(0, 6).map((t, i) => (
-              <li key={t.name} className="flex gap-3">
+      <Section title="Top Themes">
+        {report.themes.length === 0 ? (
+          <p className="text-sm text-muted">No recurring themes were extracted.</p>
+        ) : (
+          <ol className="space-y-3 text-sm text-ink">
+            {report.themes.slice(0, 6).map((theme, i) => (
+              <li key={theme.name} className="grid grid-cols-[2rem_1fr] gap-2">
                 <span className="font-mono text-muted">{i + 1}.</span>
                 <span>
-                  <span className="font-medium">{t.name}</span>{" "}
-                  <span className="text-muted">— {t.description}</span>
+                  <span className="font-medium">{theme.name}</span>{" "}
+                  <span className="text-muted">- {theme.description}</span>
                 </span>
               </li>
             ))}
           </ol>
-        </Section>
-      )}
+        )}
+      </Section>
 
       {report.comparisons.length > 0 && (
-        <Section title="Comparisons & alternatives">
-          <BulletList items={report.comparisons.map((c) => `${c.product} — ${c.context}`)} />
+        <Section title="Comparisons">
+          <BulletList items={report.comparisons.map((item) => `${item.product} - ${item.context}`)} />
         </Section>
       )}
 
       {report.switchingReasons.length > 0 && (
-        <Section title="Switching behavior">
+        <Section title="Switching">
           <ul className="space-y-2 text-sm text-ink">
-            {report.switchingReasons.map((s, i) => (
+            {report.switchingReasons.map((item, i) => (
               <li key={i}>
-                <span className={s.direction === "to" ? "text-positive" : "text-negative"}>
-                  {s.direction === "to" ? "→ To" : "← From"} {s.product}
+                <span className={item.direction === "to" ? "text-positive" : "text-negative"}>
+                  {item.direction === "to" ? "To" : "From"} {item.product}
                 </span>
-                : {s.reasons.join("; ")}
+                : {item.reasons.join("; ")}
               </li>
             ))}
           </ul>
         </Section>
       )}
 
-      {report.subreddits.length > 0 && (
-        <Section title="Subreddit breakdown">
+      <Section title="Subreddits">
+        {report.subreddits.length === 0 ? (
+          <p className="text-sm text-muted">No subreddit breakdown was returned.</p>
+        ) : (
           <div className="flex flex-wrap gap-2">
-            {report.subreddits.slice(0, 12).map((s) => (
+            {report.subreddits.slice(0, 12).map((subreddit) => (
               <span
-                key={s.name}
-                className="rounded border border-border bg-surface px-2 py-1 font-mono text-xs text-muted"
+                key={subreddit.name}
+                className="border border-border bg-canvas px-2 py-1 font-mono text-xs text-muted"
               >
-                r/{s.name} <span className="text-ink">{s.count}</span>
+                r/{subreddit.name} <span className="text-ink">{subreddit.count}</span>
               </span>
             ))}
           </div>
-        </Section>
-      )}
+        )}
+      </Section>
 
-      {report.evidence.length > 0 && (
-        <Section title="Evidence">
-          <div className="space-y-4">
-            {report.evidence.map((e, i) => (
-              <div key={i} className="rounded-md border border-border bg-surface p-3">
-                <p className="mb-2 text-sm font-medium text-ink">{e.claim}</p>
-                <div className="space-y-1.5">
-                  {e.sources.map((s, j) => (
-                    <a
-                      key={j}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer nofollow"
-                      className="block text-xs text-muted hover:text-accent"
-                    >
-                      {s.subreddit ? `r/${s.subreddit} — ` : ""}
-                      {s.title}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+      <Section title="Evidence">
+        <SourceLinks evidence={report.evidence} />
+      </Section>
 
-      {report.limitations.length > 0 && (
-        <Section title="Limitations">
-          <BulletList items={report.limitations} />
-        </Section>
-      )}
-
-      <div className="mt-6 border-t border-border pt-4 text-xs text-muted">
-        {report.sourceCount} discussions analyzed · model: {report.model}
-        {report.cached && " · served from cache"}
-      </div>
+      <Section title="Limitations">
+        <BulletList items={report.limitations} empty="No limitations were returned." />
+      </Section>
     </div>
   );
 }
 
 export function CompareReportView({ report }: { report: CompareReport }) {
   return (
-    <div className="prose-report">
+    <div>
       <div className="pb-6">
-        <p className="text-xs uppercase tracking-widest text-muted">Readdit comparison</p>
+        <p className="text-xs font-semibold uppercase text-muted">Readdit comparison</p>
         <h2 className="mt-1 text-2xl font-semibold text-ink">
           {report.productA} <span className="text-muted">vs</span> {report.productB}
         </h2>
-        <div className="mt-3 flex flex-wrap gap-4">
+        <CorpusMeta sourceCount={report.sourceCount} subredditCount={report.subreddits.length} />
+        <div className="mt-4 flex flex-wrap gap-4">
           <div>
-            <div className="mb-1 text-xs text-muted">{report.productA}</div>
+            <p className="mb-1 text-xs text-muted">{report.productA}</p>
             <SentimentBadge sentiment={report.overallSentiment.a} />
           </div>
           <div>
-            <div className="mb-1 text-xs text-muted">{report.productB}</div>
+            <p className="mb-1 text-xs text-muted">{report.productB}</p>
             <SentimentBadge sentiment={report.overallSentiment.b} />
           </div>
-        </div>
-        <div className="mt-3 text-xs text-muted">
-          {report.sourceCount} discussions · {report.subreddits.length} subreddits
         </div>
       </div>
 
       <Section title="Summary">
-        <p className="text-sm leading-relaxed text-ink">{report.summary}</p>
+        <p className="text-sm leading-7 text-ink">{report.summary}</p>
       </Section>
 
       <div className="grid gap-6 border-t border-border py-6 sm:grid-cols-2">
         <div>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-ink">
+          <h3 className="mb-3 text-xs font-semibold uppercase text-ink">
             Why choose {report.productA}
           </h3>
           <BulletList items={report.strengthsA} />
         </div>
         <div>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-ink">
+          <h3 className="mb-3 text-xs font-semibold uppercase text-ink">
             Why choose {report.productB}
           </h3>
           <BulletList items={report.strengthsB} />
@@ -216,65 +243,49 @@ export function CompareReportView({ report }: { report: CompareReport }) {
 
       <div className="grid gap-6 border-t border-border py-6 sm:grid-cols-2">
         <div>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-negative">
+          <h3 className="mb-3 text-xs font-semibold uppercase text-negative">
             {report.productA} complaints
           </h3>
           <BulletList items={report.complaintsA} />
         </div>
         <div>
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-negative">
+          <h3 className="mb-3 text-xs font-semibold uppercase text-negative">
             {report.productB} complaints
           </h3>
           <BulletList items={report.complaintsB} />
         </div>
       </div>
 
+      {report.commonThemes.length > 0 && (
+        <Section title="Common Themes">
+          <BulletList
+            items={report.commonThemes.map((theme) => `${theme.name} - ${theme.description}`)}
+          />
+        </Section>
+      )}
+
       {report.switching.length > 0 && (
-        <Section title="Switching behavior">
+        <Section title="Switching">
           <ul className="space-y-2 text-sm text-ink">
-            {report.switching.map((s, i) => (
+            {report.switching.map((item, i) => (
               <li key={i}>
-                <span className={s.direction === "to" ? "text-positive" : "text-negative"}>
-                  {s.direction === "to" ? "→ To" : "← From"} {s.product}
+                <span className={item.direction === "to" ? "text-positive" : "text-negative"}>
+                  {item.direction === "to" ? "To" : "From"} {item.product}
                 </span>
-                : {s.reasons.join("; ")}
+                : {item.reasons.join("; ")}
               </li>
             ))}
           </ul>
         </Section>
       )}
 
-      {report.evidence.length > 0 && (
-        <Section title="Evidence">
-          <div className="space-y-4">
-            {report.evidence.map((e, i) => (
-              <div key={i} className="rounded-md border border-border bg-surface p-3">
-                <p className="mb-2 text-sm font-medium text-ink">{e.claim}</p>
-                <div className="space-y-1.5">
-                  {e.sources.map((s, j) => (
-                    <a
-                      key={j}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer nofollow"
-                      className="block text-xs text-muted hover:text-accent"
-                    >
-                      {s.subreddit ? `r/${s.subreddit} — ` : ""}
-                      {s.title}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+      <Section title="Evidence">
+        <SourceLinks evidence={report.evidence} />
+      </Section>
 
-      {report.limitations.length > 0 && (
-        <Section title="Limitations">
-          <BulletList items={report.limitations} />
-        </Section>
-      )}
+      <Section title="Limitations">
+        <BulletList items={report.limitations} empty="No limitations were returned." />
+      </Section>
     </div>
   );
 }

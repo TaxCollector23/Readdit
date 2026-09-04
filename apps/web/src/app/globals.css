@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -19,11 +19,29 @@ body {
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Helvetica, Arial,
     sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 ::selection {
   background: theme("colors.accent");
   color: #fff;
+}
+
+.shell-grid {
+  background-image:
+    linear-gradient(to right, rgb(25 25 23 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(25 25 23 / 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.typing-caret {
+  animation: caret-blink 1s step-end infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 .prose-report a {

@@ -42,7 +42,7 @@ function Meta({ result }: { result: SourceSearchResult }) {
   ].filter(Boolean);
 
   if (parts.length === 0) return null;
-  return <p className="mt-1 text-xs text-muted">{parts.join(" · ")}</p>;
+  return <p className="mt-1 text-xs text-muted">{parts.join(" / ")}</p>;
 }
 
 export function SearchResultsView({ data }: { data: SourceSearchResponse }) {

@@ -37,8 +37,8 @@ function toEvidence(discussions: NormalizedDiscussion[], claim: string): Evidenc
 /**
  * Deterministic, keyword-based "analysis" that never calls an LLM — used
  * for local development and tests (READDIT_MOCK_PROVIDERS=1) so the full
- * pipeline (search → rank → synthesize → render) can be exercised without
- * spending OpenRouter budget. Evidence still points at real discussion
+ * pipeline (search -> rank -> synthesize -> render) can be exercised without
+ * spending Gemini budget. Evidence still points at real discussion
  * objects (from MockSearchProvider or a live search), never fabricated URLs.
  */
 export class MockAnalysisProvider implements AnalysisProvider {

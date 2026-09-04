@@ -90,7 +90,7 @@ query
  ↓
 research planning        (packages/core/src/planning)     — intent-aware query generation
  ↓
-retrieval                (packages/core/src/search)       — Reddit search, DuckDuckGo, OpenRouter web search
+                        retrieval                (packages/core/src/search)       — Reddit search + DuckDuckGo
  ↓
 normalization + dedup    (packages/core/src/ranking)      — canonical URLs, near-duplicate merge
  ↓
@@ -100,7 +100,7 @@ chunked evidence extraction (packages/core/src/synthesis)  — cited to source i
  ↓
 theme/sentiment aggregation
  ↓
-cross-source synthesis    (packages/core/src/analysis)     — OpenRouter, structured JSON, validated
+cross-source synthesis    (packages/core/src/analysis)     — Gemini, structured JSON, validated
  ↓
 evidence-backed report    (RedditReport / CompareReport)
 ```
@@ -119,14 +119,15 @@ apps/web        web             — Next.js landing page, demo, playground, API 
 
 ## Quickstart
 
-Requires Node 20.6+ (uses the built-in `node:sqlite` module — no native build step) and pnpm.
+Requires Node 22.5+ (uses the built-in `node:sqlite` module - no native build step) and pnpm.
 
 ```bash
 git clone <this repo>
 cd Readdit
 pnpm install
 cp .env.example .env
-# edit .env — at minimum set OPENROUTER_API_KEY (get one at https://openrouter.ai/keys)
+# or: cp .env.example .env.local
+# edit .env.local - set GEMINI_API_KEY for AI analysis
 pnpm --filter @readdit/core build
 ```
 
@@ -162,7 +163,7 @@ node packages/mcp/dist/server.js
 ### Try it without an API key
 
 Every package respects `READDIT_MOCK_PROVIDERS=1`, which swaps in a deterministic mock search
-provider and a keyword-based mock analysis provider — no OpenRouter calls, no network calls to
+provider and a keyword-based mock analysis provider - no Gemini calls, no network calls to
 Reddit. Useful for UI work, tests, and exploring the pipeline without spending API budget:
 
 ```bash
@@ -191,7 +192,7 @@ Global options:
 ```
 --json              machine-readable JSON only, no decorative output
 --limit <number>    max discussions to retrieve
---model <model>     OpenRouter model override, e.g. anthropic/claude-sonnet-4.5
+--model <model>     Gemini model override, e.g. gemini-2.5-flash
 --fresh             bypass the cache and re-research
 --depth <depth>     quick | standard | deep — bounds query fan-out and source volume
 --verbose           print diagnostic info on failure
@@ -233,7 +234,7 @@ included, and that Reddit isn't representative of the whole market — see
       "command": "node",
       "args": ["/absolute/path/to/Readdit/packages/mcp/dist/server.js"],
       "env": {
-        "OPENROUTER_API_KEY": "sk-or-..."
+        "GEMINI_API_KEY": "..."
       }
     }
   }
@@ -266,7 +267,7 @@ All live research goes through `POST /api/analyze` / `POST /api/compare`, which:
    followed by `{"type":"result","report":...}` — the UI only shows a stage once the backend
    is actually in it, never a fake percentage.
 
-Secrets (`OPENROUTER_API_KEY`, `AUTH_SECRET`, `DATABASE_URL`) are only ever read server-side.
+Secrets (`GEMINI_API_KEY`, `AUTH_SECRET`, `DATABASE_URL`) are only ever read server-side.
 
 ### Authentication
 
@@ -290,10 +291,9 @@ file as everything else — no OAuth app registration required to run this local
    one literal search.
 2. **Retrieval** — queries fan out in parallel to every configured `SearchProvider`
    (`RedditSearchProvider` hits `reddit.com/search.json` directly; `DuckDuckGoSearchProvider`
-   scrapes `site:reddit.com` results; `OpenRouterSearchProvider` uses OpenRouter's web-search
-   plugin as a fallback that works even when direct scraping is blocked/rate-limited from a
-   given network). Failures in one provider don't fail the whole search
-   (`CompositeSearchProvider` uses `Promise.allSettled`).
+   scrapes `site:reddit.com` results). Failures in one provider don't fail the whole search
+   (`CompositeSearchProvider` uses `Promise.allSettled`), so DuckDuckGo can still contribute
+   results when Reddit's public endpoint is thin or blocked.
 3. **Normalize + dedupe** — canonicalize URLs, merge near-identical titles, compute a
    relevance score (topic/term overlap) and a quality score (upvotes, comment count,
    substantive text length — **upvotes alone are never treated as truth**).
@@ -302,12 +302,12 @@ file as everything else — no OAuth app registration required to run this local
 5. **Adaptive follow-up** — if the first round comes back thin (too few subreddits, too few
    results), a small second round of queries runs automatically (`standard`/`deep` depth only).
 6. **Chunked evidence extraction** — discussions are split into ~15-source chunks, each sent to
-   OpenRouter with a numbered source list; the model may only cite those numbers
+   Gemini with a numbered source list; the model may only cite those numbers
    (`sourceIndices`), never invent a URL. Anything citing an out-of-range index is dropped.
 7. **Merge observations** — near-duplicate observations across chunks are merged (Jaccard
    similarity on normalized text) and counted, so "12 people mentioned pricing" is an actual
    count, not a guess.
-8. **Final synthesis** — one more OpenRouter call turns the merged observations into the report
+8. **Final synthesis** — one more Gemini call turns the merged observations into the report
    shape (summary, key takeaways, sentiment, themes, evidence claims). Output is validated
    against a Zod schema; on validation failure it retries once, then fails loudly rather than
    returning malformed data.
@@ -345,17 +345,17 @@ See [`.env.example`](.env.example) for the full list with defaults. The importan
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `OPENROUTER_API_KEY` | Yes (unless `READDIT_MOCK_PROVIDERS=1`) | OpenRouter API key for analysis + web-search fallback |
-| `OPENROUTER_MODEL` | No | Model id, default `openai/gpt-4o-mini` |
+| `GEMINI_API_KEY` | Yes for AI analysis (unless `READDIT_MOCK_PROVIDERS=1`) | Google AI Studio/Gemini API key used for synthesis |
+| `GEMINI_MODEL` | No | Gemini model id, default `gemini-2.5-flash` |
 | `DATABASE_URL` | No | SQLite file path, default `./data/readdit.db` — shared by cache, rate limits, and (web app) users/history |
 | `AUTH_SECRET` | Yes, for the web app | NextAuth session secret — `openssl rand -base64 32` |
 | `READDIT_CACHE_TTL_SECONDS` | No | Default 21600 (6h) |
 | `READDIT_RATE_LIMIT_PER_HOUR` | No | Web playground per-user limit, default 20 |
 | `READDIT_MOCK_PROVIDERS` | No | `1` to use mock search/analysis (no external calls) |
 
-All packages read a single root-level `.env` (the CLI and MCP server walk up from their own
-location to find it; the web app's `next.config.mjs` loads it as a fallback when it has no
-`apps/web/.env.local` of its own).
+All packages read a single root-level `.env` and `.env.local` (the CLI and MCP server walk up
+from their own location to find them; the web app's `next.config.mjs` loads the root files in
+addition to any app-local env files). Blank values are treated as unset.
 
 ## Local development
 
@@ -378,9 +378,8 @@ zero external calls, using [`MockSearchProvider`](packages/core/src/search/mockP
 - **Reddit is not representative.** Every report says so explicitly. Treat findings as "what
   Reddit discussions show," not a market-wide survey.
 - **Retrieval depends on network conditions.** Reddit's and DuckDuckGo's public endpoints can
-  rate-limit or bot-block requests from some networks/IPs; the OpenRouter web-search fallback
-  exists specifically to keep retrieval working when that happens, at the cost of an extra
-  model call per query.
+  rate-limit or bot-block requests from some networks/IPs. Retrieval-only mode still works
+  without a Gemini key, but it cannot overcome network-level blocking.
 - **This is a single-instance MVP.** Caching, rate limiting, and user data all live in one
   local SQLite file — by design, per the project's own "don't build infrastructure the MVP
   doesn't need" constraint. It's not built for multi-region serverless deployment as-is.
@@ -391,3 +390,8 @@ zero external calls, using [`MockSearchProvider`](packages/core/src/search/mockP
 ---
 
 Readdit. It reads Reddit.
+Retrieval-only commands do not need an AI key:
+
+```bash
+node packages/cli/dist/bin.js search "Cursor"
+```

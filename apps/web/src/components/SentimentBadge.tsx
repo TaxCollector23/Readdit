@@ -11,10 +11,10 @@ const LABEL_STYLES: Record<string, string> = {
 export function SentimentBadge({ sentiment }: { sentiment: Sentiment }) {
   const style = LABEL_STYLES[sentiment.label] ?? LABEL_STYLES.mixed;
   return (
-    <div className={`inline-flex items-baseline gap-2 rounded-md border px-3 py-1.5 font-mono ${style}`}>
-      <span className="text-xl font-bold">{Math.round(sentiment.score)}</span>
+    <div className={`inline-flex items-baseline gap-2 border px-3 py-1.5 font-mono ${style}`}>
+      <span className="text-xl font-semibold">{Math.round(sentiment.score)}</span>
       <span className="text-xs opacity-70">/100</span>
-      <span className="ml-1 text-xs font-semibold uppercase tracking-wide">
+      <span className="ml-1 text-xs font-semibold uppercase">
         {sentiment.label.replace("_", " ")}
       </span>
     </div>
