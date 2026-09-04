@@ -3,6 +3,8 @@ import { SqliteCacheProvider, MemoryCacheProvider } from "./cache/index.js";
 import { RedditSearchProvider } from "./search/redditProvider.js";
 import { RedditOAuthProvider } from "./search/redditOAuthProvider.js";
 import { BraveSearchProvider } from "./search/braveSearchProvider.js";
+import { PullpushProvider } from "./search/pullpushProvider.js";
+import { HNSearchProvider } from "./search/hnSearchProvider.js";
 import { DuckDuckGoSearchProvider } from "./search/duckduckgo.js";
 import { CompositeSearchProvider } from "./search/compositeProvider.js";
 import { MockSearchProvider } from "./search/mockProvider.js";
@@ -29,17 +31,20 @@ function buildSearchProvider(requestId?: string): SearchProvider {
   const providers: SearchProvider[] = [];
 
   if (braveKey) {
-    // Brave Search — works reliably from any server, no IP blocking
+    // Brave Search — most reliable, returns real Reddit results, free 2k/month
     providers.push(new BraveSearchProvider(braveKey, requestId));
   } else if (redditClientId && redditClientSecret) {
-    // Reddit OAuth — also bypasses IP blocking
+    // Reddit OAuth — bypasses IP blocking
     providers.push(new RedditOAuthProvider(redditClientId, redditClientSecret, config.userAgent, requestId));
   } else {
-    // Public Reddit JSON API — may 403 from some server IPs
+    // No keys needed: Pullpush (Reddit archive) + public Reddit API
+    providers.push(new PullpushProvider(requestId));
     providers.push(new RedditSearchProvider(config.userAgent, requestId));
   }
 
-  // DuckDuckGo as secondary signal (works on most server IPs)
+  // Always include HN (free, no key, high-signal developer discussions)
+  providers.push(new HNSearchProvider(requestId));
+  // DuckDuckGo as additional signal
   providers.push(new DuckDuckGoSearchProvider(config.userAgent, requestId));
 
   return new CompositeSearchProvider(providers, requestId);
