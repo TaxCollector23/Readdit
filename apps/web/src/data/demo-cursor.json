@@ -1,0 +1,150 @@
+{
+  "query": "Cursor",
+  "intent": "analyze",
+  "summary": "Cursor is broadly well-regarded on Reddit as a powerful AI coding assistant, but discussions reveal a consistent pattern of frustration with its subscription pricing model, occasional reliability issues, and concerns about code quality for complex tasks. Developers who benefit most are those working on greenfield projects or unfamiliar codebases. Experienced engineers tend to have more mixed reactions, finding the AI suggestions occasionally useful but also prone to introducing subtle bugs.",
+  "keyTakeaways": [
+    "Pricing is the most common friction point — many users feel the cost isn't justified for solo developers or hobbyists.",
+    "Cursor excels at code generation for simple to mid-complexity tasks, but struggles with large, deeply-coupled codebases.",
+    "The 'Tab' autocomplete feature is praised almost universally; the Agent mode is more divisive.",
+    "Several threads note a shift in sentiment from 2023 (enthusiastic adoption) to 2024-25 (more critical evaluation).",
+    "Claude Code and GitHub Copilot are the most-cited alternatives; Windsurf comes up in recent discussions."
+  ],
+  "sentiment": {
+    "score": 61,
+    "label": "mixed-positive",
+    "confidence": 0.68
+  },
+  "praise": [
+    "Tab autocomplete is described as 'genuinely magical' for boilerplate and repetitive patterns",
+    "Works well for learning new languages or frameworks by explaining as it writes",
+    "Context-aware editing across multiple files is cited as a major productivity boost",
+    "Better than Copilot for understanding full-project context, per multiple comparisons",
+    "Useful for rubber-duck debugging — describing a problem often surfaces the solution"
+  ],
+  "complaints": [
+    "Pricing ($20/month pro) feels steep for developers who don't use it daily",
+    "Agent mode can make sweeping changes that break existing functionality without obvious warnings",
+    "Hallucinated library methods and outdated API usage is a recurring complaint",
+    "Rate limiting on Claude 3.5 Sonnet mid-session frustrates users on complex tasks",
+    "Background indexing slows down on large monorepos; some users report high CPU usage"
+  ],
+  "featureRequests": [
+    "More granular rate limit visibility — users want to see how much quota remains",
+    "Per-project model selection without switching globally",
+    "Offline mode or local model support for sensitive codebases",
+    "Better diff UI when Agent makes multi-file changes",
+    "Team plan with shared context and project memory"
+  ],
+  "themes": [
+    {
+      "name": "Pricing vs. value debate",
+      "description": "The largest recurring theme — solo devs and students often conclude the subscription isn't worth it, while professional developers doing Cursor-heavy work find it pays for itself.",
+      "frequency": 18
+    },
+    {
+      "name": "Comparison to alternatives",
+      "description": "Cursor vs. Claude Code, Copilot, and Windsurf appear in nearly every recent thread. Claude Code is seen as a philosophical counterpart — terminal-first vs. IDE-native.",
+      "frequency": 15
+    },
+    {
+      "name": "Agent mode reliability",
+      "description": "Threads about Agent mode are split: power users who've learned to prompt it carefully report high productivity; others find it makes too many autonomous decisions.",
+      "frequency": 11
+    },
+    {
+      "name": "Context window and large codebases",
+      "description": "Performance degradation on large projects is a practical concern raised consistently, especially by users at companies with multi-million-line repos.",
+      "frequency": 9
+    }
+  ],
+  "comparisons": [
+    { "product": "Claude Code", "context": "Cited by terminal-first developers as a strong alternative; praised for not requiring VS Code" },
+    { "product": "GitHub Copilot", "context": "Seen as the safer enterprise choice but weaker at multi-file context" },
+    { "product": "Windsurf", "context": "Mentioned as a cheaper Cursor alternative with improving quality" },
+    { "product": "Zed + AI", "context": "Niche mention from performance-focused developers" }
+  ],
+  "switchingReasons": [
+    { "direction": "to", "product": "Cursor", "reasons": ["Better multi-file context than Copilot", "More natural autocomplete completions", "Agent mode for larger refactors"] },
+    { "direction": "from", "product": "Cursor", "reasons": ["Preferred terminal workflow of Claude Code", "Monthly cost not justified for part-time coding"] }
+  ],
+  "evidence": [
+    {
+      "claim": "Tab autocomplete is the most-praised feature across discussions",
+      "sources": [
+        {
+          "title": "After 6 months of Cursor, here's my honest take",
+          "url": "https://www.reddit.com/r/cursor/comments/1abc123/after_6_months_of_cursor_heres_my_honest_take/",
+          "subreddit": "cursor",
+          "author": "devblog_guy",
+          "timestamp": "2025-03-14T10:22:00.000Z",
+          "score": 847
+        },
+        {
+          "title": "Cursor vs Copilot — a real comparison after 3 months",
+          "url": "https://www.reddit.com/r/webdev/comments/1def456/cursor_vs_copilot_a_real_comparison/",
+          "subreddit": "webdev",
+          "author": "typescript_enjoyer",
+          "timestamp": "2025-04-02T15:45:00.000Z",
+          "score": 1203
+        }
+      ]
+    },
+    {
+      "claim": "Pricing is the most common reason people don't upgrade or churn from pro",
+      "sources": [
+        {
+          "title": "Is Cursor worth $20/month for a solo dev?",
+          "url": "https://www.reddit.com/r/programming/comments/1ghi789/is_cursor_worth_20_month_for_a_solo_dev/",
+          "subreddit": "programming",
+          "author": "freelance_dev_22",
+          "timestamp": "2025-05-20T08:30:00.000Z",
+          "score": 563
+        },
+        {
+          "title": "Cancelled Cursor after 3 months — not worth it for my use case",
+          "url": "https://www.reddit.com/r/SaaS/comments/1jkl012/cancelled_cursor_after_3_months/",
+          "subreddit": "SaaS",
+          "author": "bootstrap_founder",
+          "timestamp": "2025-06-08T19:12:00.000Z",
+          "score": 312
+        }
+      ]
+    },
+    {
+      "claim": "Agent mode reliability is divisive — experienced users love it, others find it too autonomous",
+      "sources": [
+        {
+          "title": "Cursor agent deleted half my project — am I using it wrong?",
+          "url": "https://www.reddit.com/r/cursor/comments/1mno345/cursor_agent_deleted_half_my_project/",
+          "subreddit": "cursor",
+          "author": "junior_dev_help",
+          "timestamp": "2025-07-15T12:00:00.000Z",
+          "score": 892
+        }
+      ]
+    }
+  ],
+  "sourceCount": 47,
+  "subreddits": [
+    { "name": "cursor", "count": 14 },
+    { "name": "webdev", "count": 10 },
+    { "name": "programming", "count": 9 },
+    { "name": "SaaS", "count": 7 },
+    { "name": "ChatGPT", "count": 4 },
+    { "name": "LocalLLaMA", "count": 3 }
+  ],
+  "confidence": {
+    "level": "high",
+    "sourceCount": 47,
+    "subredditCount": 6,
+    "reasoning": "High source volume with consistent themes across multiple subreddits and time periods increases confidence in the overall picture."
+  },
+  "limitations": [
+    "Reddit users skew toward developers and tech-savvy individuals — non-technical users' experiences are underrepresented.",
+    "Recent negative threads may be over-indexed due to recency and engagement bias (complaints generate more replies).",
+    "This is a sample report for UI demonstration purposes — generated from example data, not a live search."
+  ],
+  "generatedAt": "2025-08-01T12:00:00.000Z",
+  "model": "example-report",
+  "cached": false
+}

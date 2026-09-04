@@ -85,7 +85,7 @@ function CorpusMeta({
     <p className="text-xs text-muted">
       {sourceCount} discussion{sourceCount === 1 ? "" : "s"} / {subredditCount} subreddit
       {subredditCount === 1 ? "" : "s"}
-      {model ? ` / model: ${model}` : ""}
+      {model && model !== "example-report" ? ` / model: ${model}` : ""}
       {cached ? " / served from cache" : ""}
     </p>
   );

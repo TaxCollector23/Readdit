@@ -13,7 +13,7 @@ export default function AboutPage() {
       <main className="mx-auto max-w-3xl px-4 py-14 sm:px-6 sm:py-20">
         <p className="font-mono text-xs uppercase text-accent">About Readdit</p>
         <h1 className="mt-4 text-3xl font-semibold leading-tight text-ink sm:text-4xl">
-          It started as a joke about someone&apos;s "rep."
+          It started as a joke about someone&apos;s &ldquo;rep.&rdquo;
         </h1>
 
         <div className="mt-8 space-y-5 text-base leading-8 text-muted">
@@ -25,7 +25,7 @@ export default function AboutPage() {
             just to keep the bit alive.
           </p>
           <p>
-            That got me thinking about the version of "rep" that already exists on
+            That got me thinking about the version of &ldquo;rep&rdquo; that already exists on
             Reddit. People are constantly comparing tools, complaining about products,
             describing weird edge cases, and leaving little firsthand notes about
             what worked and what did not.

@@ -3,6 +3,8 @@ dist/
 .next/
 out/
 data/
+# Keep the web app's bundled fixture data
+!/apps/web/src/data/
 *.db
 *.db-journal
 *.db-wal
