@@ -21,6 +21,21 @@ function isRedditUrl(url: string): boolean {
   return /(^|\.)reddit\.com/i.test(url) || url.includes("redd.it");
 }
 
+function communityBonus(r: SearchResult): number {
+  const url = r.url.toLowerCase();
+  const src = (r.source ?? "").toLowerCase();
+  if (isRedditUrl(url)) return 0.12;
+  // High-signal peer discussion communities
+  if (src === "hackernews" || url.includes("news.ycombinator.com")) return 0.08;
+  if (src === "lemmy" || url.includes("lemmy.")) return 0.07;
+  if (src === "stackoverflow" || url.includes("stackoverflow.com")) return 0.06;
+  if (src === "devto" || url.includes("dev.to")) return 0.04;
+  // Scraped sources with lower signal
+  if (src === "pullpush" || src === "pullpush-comments") return 0.10;
+  if (src === "brave" || src === "bing" || src === "duckduckgo" || src === "searxng") return 0.02;
+  return 0;
+}
+
 function tokenize(text: string): Set<string> {
   return new Set(
     text
@@ -59,12 +74,13 @@ function qualityScore(r: SearchResult): number {
 
   const scoreComponent = Math.min(1, Math.log10(Math.max(score, 0) + 1) / 3);
   const commentsComponent = Math.min(1, Math.log10(Math.max(comments, 0) + 1) / 2.5);
-  const textComponent = Math.min(1, textLen / 500);
-  const redditBonus = isRedditUrl(r.url) ? 0.15 : 0;
+  // Reward substantive content — comments and long answers signal real discussion
+  const textComponent = Math.min(1, textLen / 600);
+  const bonus = communityBonus(r);
 
   return Math.min(
     1,
-    scoreComponent * 0.35 + commentsComponent * 0.25 + textComponent * 0.25 + redditBonus
+    scoreComponent * 0.35 + commentsComponent * 0.25 + textComponent * 0.25 + bonus
   );
 }
 
@@ -148,10 +164,11 @@ export function rankAndDiversify(
     })
     .sort((a, b) => b.combined - a.combined);
 
-  // Greedy round-robin by subreddit so the top results aren't monopolized.
+  // Greedy round-robin by subreddit/source so the top results aren't monopolized.
+  // Non-Reddit sources bucket by their source name so they get spread out too.
   const bySubreddit = new Map<string, typeof scored>();
   for (const item of scored) {
-    const key = item.d.subreddit ?? "unknown";
+    const key = item.d.subreddit ?? item.d.source ?? "unknown";
     if (!bySubreddit.has(key)) bySubreddit.set(key, []);
     bySubreddit.get(key)!.push(item);
   }

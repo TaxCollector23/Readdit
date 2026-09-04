@@ -1,32 +1,28 @@
-import {
-  createCoreFromEnv,
-  createSearchCoreFromEnv,
-  checkConfig,
-  loadEnvFile,
-  ReadditError,
-  RateLimitedError,
-  ConfigurationError,
-  type ReadditOptions,
-  type RedditReport,
-  type CompareReport,
-} from "@readdit/core";
-loadEnvFile();
-
 import { Command } from "commander";
 import { StatusReporter, theme, RULE } from "./ui/theme.js";
 import { formatCompareReport, formatReport } from "./ui/format.js";
+import {
+  loadCredentials,
+  getIdToken,
+  saveCredentials,
+  clearCredentials,
+  runLoginFlow,
+  type Credentials,
+} from "./auth.js";
+import { cloudStream, cloudSearchRaw } from "./api.js";
+import type { RedditReport, CompareReport, NormalizedDiscussion } from "@readdit/core";
 
 const program = new Command();
 
 program
   .name("readdit")
   .description(
-    "Readdit reads Reddit so you don't have to. Evidence-backed Reddit research from your terminal."
+    "Readdit reads Reddit so you don't have to. Evidence-backed Reddit research from your terminal.\n" +
+      "Run `readdit login` to get started — no API keys required."
   )
-  .version("0.1.0")
+  .version("0.2.0")
   .option("--json", "output machine-readable JSON only (no decorative output)")
   .option("--limit <number>", "max discussions to retrieve", parseIntOption)
-  .option("--model <model>", "Gemini model override, e.g. gemini-2.5-flash")
   .option("--fresh", "bypass the cache and re-research")
   .option("--verbose", "print diagnostic info on failure")
   .option("--quiet", "suppress status lines")
@@ -35,16 +31,13 @@ program
 
 function parseIntOption(value: string): number {
   const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) {
-    throw new Error("must be a positive number");
-  }
+  if (!Number.isFinite(n) || n <= 0) throw new Error("must be a positive number");
   return n;
 }
 
 interface GlobalOpts {
   json?: boolean;
   limit?: number;
-  model?: string;
   fresh?: boolean;
   verbose?: boolean;
   quiet?: boolean;
@@ -60,101 +53,72 @@ const PROGRESS_MESSAGES: Record<string, string> = {
   synthesizing: "Synthesizing Reddit's opinions...",
 };
 
-function readditOptionsFrom(opts: GlobalOpts, status?: StatusReporter): ReadditOptions {
-  return {
-    limit: opts.limit,
-    model: opts.model,
-    fresh: opts.fresh,
-    depth: opts.depth,
-    onProgress: status
-      ? (stage, detail) => {
-          if (stage === "done") return;
-          status.step(detail ?? PROGRESS_MESSAGES[stage] ?? stage);
-        }
-      : undefined,
-  };
-}
-
-function exitCodeFor(err: unknown): number {
-  if (err instanceof ReadditError) {
-    switch (err.code) {
-      case "invalid_input":
-        return 2;
-      case "configuration_error":
-        return 3;
-      case "rate_limited":
-        return 5;
-      case "no_results":
-        return 1;
-      default:
-        return 1;
-    }
-  }
-  return 1;
-}
-
-function printError(err: unknown, opts: GlobalOpts): void {
-  const message = err instanceof Error ? err.message : String(err);
-
-  if (opts.json) {
-    process.stdout.write(
-      JSON.stringify(
-        {
-          error: true,
-          code: err instanceof ReadditError ? err.code : "unknown_error",
-          message,
-        },
-        null,
-        2
-      ) + "\n"
+/** Load credentials and get a fresh ID token, or exit with a friendly error. */
+async function requireAuth(): Promise<{ idToken: string; creds: Credentials }> {
+  const creds = await loadCredentials();
+  if (!creds) {
+    process.stderr.write(
+      `\n${theme.red("Not logged in.")} Run ${theme.cyan("readdit login")} to get started — no API keys required.\n\n`
     );
-    return;
+    process.exitCode = 3;
+    throw new Error("unauthenticated");
   }
 
-  process.stderr.write(`\n${theme.red("Readdit couldn't finish that request.")}\n\n`);
-  process.stderr.write(`${message}\n`);
+  const tokens = await getIdToken(creds);
+  if (!tokens) {
+    process.stderr.write(
+      `\n${theme.red("Session expired.")} Run ${theme.cyan("readdit login")} to sign in again.\n\n`
+    );
+    process.exitCode = 3;
+    throw new Error("unauthenticated");
+  }
 
-  if (err instanceof ReadditError && err.code === "configuration_error") {
-    process.stderr.write(`\nAdd the missing variable(s) to your environment or a .env file.\n`);
-  }
-  if (err instanceof RateLimitedError && err.retryAfterSeconds) {
-    process.stderr.write(`\nRetry in about ${err.retryAfterSeconds}s.\n`);
-  }
-  if (!opts.verbose) {
-    process.stderr.write(`\nRun with --verbose for diagnostics.\n`);
-  } else if (err instanceof Error && err.stack) {
-    process.stderr.write(`\n${theme.dim(err.stack)}\n`);
-  }
-}
+  // Persist updated refresh token (Firebase rotates it on each use)
+  const updated: Credentials = { ...creds, refreshToken: tokens.refreshToken };
+  await saveCredentials(updated);
 
-/**
- * Throws (rather than calling process.exit itself) so this behaves
- * correctly no matter where it's called from — including inside the
- * interactive REPL, where a hard process.exit() would kill the whole
- * session instead of just failing the one query, and would skip the
- * readline cleanup in runInteractive's `finally`. execute() below is what
- * turns this into the right exit code once the process actually ends.
- */
-function assertConfigured(): void {
-  const { ok, missing } = checkConfig();
-  if (ok) return;
-  throw new ConfigurationError(`Readdit is not configured. Missing: ${missing.join(", ")}`);
+  return { idToken: tokens.idToken, creds: updated };
 }
 
 async function runAnalyze(
   topic: string,
-  method: "analyze" | "complaints" | "features" | "sentiment",
+  intent: "analyze" | "complaints" | "features" | "sentiment",
   opts: GlobalOpts
 ): Promise<void> {
-  assertConfigured();
+  const { idToken } = await requireAuth();
   const status = new StatusReporter(!opts.json && !opts.quiet);
+
   if (!opts.json && !opts.quiet) {
     process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it...")}\n\n`);
   }
 
-  const core = createCoreFromEnv({ model: opts.model });
-  const report: RedditReport = await core[method](topic, readditOptionsFrom(opts, status));
-  status.done(`Analyzed ${report.sourceCount} discussions across ${report.subreddits.length} subreddits.`);
+  let report: RedditReport | null = null;
+
+  for await (const evt of cloudStream(
+    "analyze",
+    {
+      query: topic,
+      intent,
+      limit: opts.limit ?? 25,
+      fresh: opts.fresh,
+      depth: opts.depth,
+    },
+    idToken
+  )) {
+    if (evt.type === "progress" && evt.stage) {
+      status.step(evt.detail ?? PROGRESS_MESSAGES[evt.stage] ?? evt.stage);
+    } else if (evt.type === "result" && evt.report) {
+      report = evt.report as RedditReport;
+    } else if (evt.type === "error") {
+      throw new Error(evt.error ?? "Something went wrong.");
+    }
+  }
+
+  if (!report) throw new Error("No report received from server.");
+
+  status.done(
+    `Analyzed ${report.sourceCount} discussions across ${report.subreddits.length} subreddits.`
+  );
   if (!opts.json && !opts.quiet) process.stdout.write("\n");
 
   if (opts.json) {
@@ -165,18 +129,37 @@ async function runAnalyze(
 }
 
 async function runCompare(topicA: string, topicB: string, opts: GlobalOpts): Promise<void> {
-  assertConfigured();
+  const { idToken } = await requireAuth();
   const status = new StatusReporter(!opts.json && !opts.quiet);
+
   if (!opts.json && !opts.quiet) {
-    process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it...")}\n\n`);
+    process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Comparing...")}\n\n`);
   }
 
-  const core = createCoreFromEnv({ model: opts.model });
-  const report: CompareReport = await core.compare(
-    topicA,
-    topicB,
-    readditOptionsFrom(opts, status)
-  );
+  let report: CompareReport | null = null;
+
+  for await (const evt of cloudStream(
+    "compare",
+    {
+      topicA,
+      topicB,
+      limit: opts.limit ?? 25,
+      fresh: opts.fresh,
+      depth: opts.depth,
+    },
+    idToken
+  )) {
+    if (evt.type === "progress" && evt.stage) {
+      status.step(evt.detail ?? PROGRESS_MESSAGES[evt.stage] ?? evt.stage);
+    } else if (evt.type === "result" && evt.report) {
+      report = evt.report as CompareReport;
+    } else if (evt.type === "error") {
+      throw new Error(evt.error ?? "Something went wrong.");
+    }
+  }
+
+  if (!report) throw new Error("No comparison received from server.");
+
   status.done(`Compared using ${report.sourceCount} discussions.`);
   if (!opts.json && !opts.quiet) process.stdout.write("\n");
 
@@ -188,14 +171,37 @@ async function runCompare(topicA: string, topicB: string, opts: GlobalOpts): Pro
 }
 
 async function runAsk(question: string, opts: GlobalOpts): Promise<void> {
-  assertConfigured();
+  const { idToken } = await requireAuth();
   const status = new StatusReporter(!opts.json && !opts.quiet);
+
   if (!opts.json && !opts.quiet) {
     process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it...")}\n\n`);
   }
 
-  const core = createCoreFromEnv({ model: opts.model });
-  const report = await core.ask(question, readditOptionsFrom(opts, status));
+  let report: RedditReport | null = null;
+
+  for await (const evt of cloudStream(
+    "analyze",
+    {
+      query: question,
+      intent: "ask",
+      limit: opts.limit ?? 25,
+      fresh: opts.fresh,
+      depth: opts.depth,
+    },
+    idToken
+  )) {
+    if (evt.type === "progress" && evt.stage) {
+      status.step(evt.detail ?? PROGRESS_MESSAGES[evt.stage] ?? evt.stage);
+    } else if (evt.type === "result" && evt.report) {
+      report = evt.report as RedditReport;
+    } else if (evt.type === "error") {
+      throw new Error(evt.error ?? "Something went wrong.");
+    }
+  }
+
+  if (!report) throw new Error("No report received from server.");
+
   status.done(`Answered using ${report.sourceCount} discussions.`);
   if (!opts.json && !opts.quiet) process.stdout.write("\n");
 
@@ -208,12 +214,14 @@ async function runAsk(question: string, opts: GlobalOpts): Promise<void> {
 
 async function runSearch(topic: string, opts: GlobalOpts): Promise<void> {
   const status = new StatusReporter(!opts.json && !opts.quiet);
+
   if (!opts.json && !opts.quiet) {
-    process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Searching, no analysis...")}\n\n`);
+    process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Searching...")}\n\n`);
   }
 
-  const core = createSearchCoreFromEnv({});
-  const { discussions, queriesUsed } = await core.search(topic, readditOptionsFrom(opts, status));
+  status.step("Searching Reddit...");
+  const { discussions, queriesUsed } = await cloudSearchRaw(topic, opts.limit ?? 20);
+  status.done(`${discussions.length} discussions found.`);
 
   if (opts.json) {
     process.stdout.write(JSON.stringify({ query: topic, queriesUsed, discussions }, null, 2) + "\n");
@@ -222,7 +230,8 @@ async function runSearch(topic: string, opts: GlobalOpts): Promise<void> {
 
   process.stdout.write(`${theme.bold(topic)}\n${RULE}\n`);
   process.stdout.write(theme.dim(`Queries: ${queriesUsed.join(" | ")}\n\n`));
-  for (const d of discussions) {
+
+  for (const d of discussions as NormalizedDiscussion[]) {
     process.stdout.write(`${theme.cyan(d.title)}\n`);
     process.stdout.write(
       theme.dim(
@@ -240,9 +249,64 @@ function globalOpts(): GlobalOpts {
 
 const GLOBAL_OPTS_HELP = `
 Global options (pass anywhere, e.g. before the subcommand):
-  --json | --limit <n> | --model <model> | --fresh | --depth <depth> | --verbose | --quiet | --no-color
+  --json | --limit <n> | --fresh | --depth <depth> | --verbose | --quiet | --no-color
 
 Examples:`;
+
+// ── Auth commands ───────────────────────────────────────────────────────────
+
+program
+  .command("login")
+  .description("Sign in with Google — opens your browser, no API key needed")
+  .action(async () => {
+    process.stdout.write(`${theme.brand("Readdit")}\n`);
+    process.stdout.write(`Opening browser to sign in with Google...\n\n`);
+
+    try {
+      const creds = await runLoginFlow();
+      await saveCredentials(creds);
+      process.stdout.write(
+        `${theme.green("✓")} Logged in${creds.email ? ` as ${theme.bold(creds.email)}` : ""}.\n\n`
+      );
+      process.stdout.write(
+        `You can now run:\n  ${theme.cyan('readdit "Cursor"')}\n  ${theme.cyan('readdit compare "Linear" "Jira"')}\n`
+      );
+    } catch (err) {
+      process.stderr.write(
+        `\n${theme.red("Login failed:")} ${err instanceof Error ? err.message : String(err)}\n`
+      );
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("logout")
+  .description("Sign out and remove stored credentials")
+  .action(async () => {
+    await clearCredentials();
+    process.stdout.write(`${theme.green("✓")} Signed out.\n`);
+  });
+
+program
+  .command("whoami")
+  .description("Show the currently signed-in account")
+  .action(async () => {
+    const creds = await loadCredentials();
+    if (!creds) {
+      process.stdout.write(`Not signed in. Run ${theme.cyan("readdit login")}.\n`);
+      return;
+    }
+    const tokens = await getIdToken(creds);
+    if (!tokens) {
+      process.stdout.write(`Session expired. Run ${theme.cyan("readdit login")} again.\n`);
+      return;
+    }
+    process.stdout.write(
+      `Signed in${creds.email ? ` as ${theme.bold(creds.email)}` : " (no email stored)"}.\n`
+    );
+  });
+
+// ── Research commands ───────────────────────────────────────────────────────
 
 program
   .command("analyze <query>")
@@ -250,7 +314,7 @@ program
   .description("Full evidence-backed Reddit analysis of a topic")
   .addHelpText(
     "after",
-    `${GLOBAL_OPTS_HELP}\n  $ readdit analyze "Cursor"\n  $ readdit analyze "Cursor" --json --limit 50`
+    `${GLOBAL_OPTS_HELP}\n  $ readdit analyze "Cursor"\n  $ readdit analyze "Cursor" --json`
   )
   .action(async (query: string) => {
     await execute(() => runAnalyze(query, "analyze", globalOpts()));
@@ -259,11 +323,8 @@ program
 program
   .command("compare <topicA> <topicB>")
   .alias("c")
-  .description("Compare how Reddit discusses two products/topics")
-  .addHelpText(
-    "after",
-    `${GLOBAL_OPTS_HELP}\n  $ readdit compare "Cursor" "Claude Code"`
-  )
+  .description("Compare how Reddit discusses two products")
+  .addHelpText("after", `${GLOBAL_OPTS_HELP}\n  $ readdit compare "Cursor" "Claude Code"`)
   .action(async (topicA: string, topicB: string) => {
     await execute(() => runCompare(topicA, topicB, globalOpts()));
   });
@@ -280,7 +341,7 @@ program
 program
   .command("features <query>")
   .alias("f")
-  .description("Recurring feature requests / missing functionality")
+  .description("Recurring feature requests and missing functionality")
   .addHelpText("after", `${GLOBAL_OPTS_HELP}\n  $ readdit features "OpenWebUI"`)
   .action(async (query: string) => {
     await execute(() => runAnalyze(query, "features", globalOpts()));
@@ -298,10 +359,7 @@ program
 program
   .command("ask <question>")
   .description('Ask a natural-language question, e.g. "Why are people leaving Cursor?"')
-  .addHelpText(
-    "after",
-    `${GLOBAL_OPTS_HELP}\n  $ readdit ask "Why are people leaving Cursor?"`
-  )
+  .addHelpText("after", `${GLOBAL_OPTS_HELP}\n  $ readdit ask "Why are people leaving Cursor?"`)
   .action(async (question: string) => {
     await execute(() => runAsk(question, globalOpts()));
   });
@@ -309,7 +367,7 @@ program
 program
   .command("search <query>")
   .alias("se")
-  .description("Retrieve and rank Reddit discussions without LLM synthesis (source-only mode)")
+  .description("Find Reddit discussions without AI synthesis — fast, no login needed")
   .addHelpText("after", `${GLOBAL_OPTS_HELP}\n  $ readdit search "RTX 5070 Ti" --limit 30`)
   .action(async (query: string) => {
     await execute(() => runSearch(query, globalOpts()));
@@ -318,77 +376,21 @@ program
 program.addHelpText(
   "after",
   `
+Getting started:
+  $ readdit login                               Sign in (opens browser, no API key)
+
 Examples:
-  $ readdit "Cursor"                                  (shorthand for analyze)
+  $ readdit "Cursor"                            Shorthand for analyze
   $ readdit analyze "Cursor" --json
   $ readdit compare "Cursor" "Claude Code"
   $ readdit complaints "Vercel"
   $ readdit ask "Why are people leaving Cursor?"
-  $ readdit "Cursor" --fresh --depth deep
+  $ readdit search "Linear app"                 No login needed
 
 Readdit. It reads Reddit.`
 );
 
-/**
- * Reads a piped query from stdin, e.g. `echo "Cursor" | readdit`. Bounded by
- * a short timeout: a non-TTY stdin that's simply open and idle (common
- * under a process supervisor that hands the child an unused pipe fd) would
- * otherwise block this for-await loop forever, since there's no EOF and no
- * data. If nothing arrives quickly, treat it as "nothing was piped" rather
- * than hanging.
- */
-async function readStdinIfPiped(): Promise<string | undefined> {
-  if (process.stdin.isTTY) return undefined;
-
-  const TIMED_OUT = Symbol("timed_out");
-  let timer: NodeJS.Timeout;
-  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
-    timer = setTimeout(() => resolve(TIMED_OUT), 300);
-    timer.unref?.();
-  });
-
-  const read = (async () => {
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
-    return Buffer.concat(chunks).toString("utf8").trim();
-  })();
-
-  const result = await Promise.race([read, timeout]);
-  clearTimeout(timer!);
-
-  if (result === TIMED_OUT) {
-    // Detach from the still-pending read so an idle stdin can't keep the
-    // process alive waiting for a signal that will never arrive.
-    process.stdin.pause();
-    return undefined;
-  }
-  return result.length > 0 ? result : undefined;
-}
-
-async function runInteractive(opts: GlobalOpts): Promise<void> {
-  const { createInterface } = await import("node:readline/promises");
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-
-  process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it, interactively.")}\n\n`);
-  process.stdout.write(theme.dim('Type a topic or question, or "exit" to quit.\n\n'));
-
-  try {
-    while (true) {
-      const query = (await rl.question(theme.cyan("readdit> "))).trim();
-      if (!query || query === "exit" || query === "quit") break;
-      process.stdout.write("\n");
-      await execute(() => runAnalyze(query, "analyze", opts));
-      process.exitCode = 0; // one failed query in a REPL shouldn't taint the session's exit code
-      process.stdout.write("\n");
-    }
-  } finally {
-    rl.close();
-  }
-}
-
-// Shorthand: `readdit "Cursor"` behaves like `readdit analyze "Cursor"`.
-// With no query at all: read a piped stdin query if present, otherwise (on
-// a TTY) drop into a small interactive research session.
+// Shorthand: `readdit "Cursor"` → analyze. No query → interactive or help.
 program
   .argument("[query]", "topic to research (shorthand for `analyze`)")
   .action(async (query: string | undefined) => {
@@ -408,6 +410,72 @@ program
     program.help();
   });
 
+async function readStdinIfPiped(): Promise<string | undefined> {
+  if (process.stdin.isTTY) return undefined;
+
+  const TIMED_OUT = Symbol("timed_out");
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), 300);
+    (timer as unknown as { unref?: () => void }).unref?.();
+  });
+
+  const read = (async () => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+    return Buffer.concat(chunks).toString("utf8").trim();
+  })();
+
+  const result = await Promise.race([read, timeout]);
+  clearTimeout(timer!);
+
+  if (result === TIMED_OUT) {
+    process.stdin.pause();
+    return undefined;
+  }
+  return result.length > 0 ? result : undefined;
+}
+
+async function runInteractive(opts: GlobalOpts): Promise<void> {
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+  process.stdout.write(`${theme.brand("Readdit")}\n${theme.dim("Reading it, interactively.")}\n\n`);
+  process.stdout.write(theme.dim('Type a topic or question, or "exit" to quit.\n\n'));
+
+  try {
+    while (true) {
+      const query = (await rl.question(theme.cyan("readdit> "))).trim();
+      if (!query || query === "exit" || query === "quit") break;
+      process.stdout.write("\n");
+      await execute(() => runAnalyze(query, "analyze", opts));
+      process.exitCode = 0;
+      process.stdout.write("\n");
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+function printError(err: unknown, opts: GlobalOpts): void {
+  // Auth errors are already printed by requireAuth(); skip double-printing
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg === "unauthenticated") return;
+
+  if (opts.json) {
+    process.stdout.write(
+      JSON.stringify({ error: true, message: msg }, null, 2) + "\n"
+    );
+    return;
+  }
+
+  process.stderr.write(`\n${theme.red("Readdit couldn't finish that request.")}\n\n${msg}\n`);
+  if (!opts.verbose) process.stderr.write(`\nRun with --verbose for diagnostics.\n`);
+  else if (err instanceof Error && err.stack) {
+    process.stderr.write(`\n${theme.dim(err.stack)}\n`);
+  }
+}
+
 async function execute(fn: () => Promise<void>): Promise<void> {
   const opts = program.opts<GlobalOpts>();
   if (opts.verbose) process.env.READDIT_VERBOSE = "1";
@@ -415,7 +483,9 @@ async function execute(fn: () => Promise<void>): Promise<void> {
     await fn();
   } catch (err) {
     printError(err, opts);
-    process.exitCode = exitCodeFor(err);
+    if (process.exitCode === undefined || process.exitCode === 0) {
+      process.exitCode = 1;
+    }
   }
 }
 

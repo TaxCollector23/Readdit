@@ -3,14 +3,14 @@ import type { ReadditIntent, ResearchPlan } from "../types.js";
 const DEPTH_QUERY_CAP: Record<"quick" | "standard" | "deep", number> = {
   quick: 4,
   standard: 8,
-  deep: 12,
+  deep: 14,
 };
 
 /**
- * Generates a fan-out of Reddit-focused research queries for a topic,
- * tailored to what the user is trying to learn. This is what keeps Readdit
- * from being "search once, summarize" — each intent biases the query mix
- * toward the kind of evidence that actually answers the question.
+ * Generates a fan-out of research queries for a topic, tailored to what the
+ * user is trying to learn. Queries span Reddit-specific phrasing AND open-web
+ * phrasing so that providers like HN, Dev.to, StackExchange, and Lemmy also
+ * return relevant material for non-Reddit niches.
  */
 export function planQueries(
   intent: ReadditIntent,
@@ -28,61 +28,75 @@ export function planQueries(
     case "compare": {
       const other = options.secondaryTopic ?? "";
       queries = [
-        `${t} review`,
-        `${t} problems`,
-        `${other} review`,
-        `${other} problems`,
         `${t} vs ${other}`,
         `${other} vs ${t}`,
+        `${t} review`,
+        `${other} review`,
         `switched from ${t} to ${other}`,
         `switched from ${other} to ${t}`,
+        `${t} vs ${other} reddit`,
+        `${t} problems`,
+        `${other} problems`,
         `${t} alternatives`,
         `${other} alternatives`,
+        `${t} or ${other} which is better`,
+        `${t} experience`,
+        `${other} experience`,
       ];
-      reasoning = `Comparing two products: researching each independently plus direct head-to-head and switching-direction threads.`;
+      reasoning = `Comparison: independent + head-to-head + switching-direction queries across open web and Reddit.`;
       break;
     }
     case "complaints": {
       queries = [
-        `${t} complaints`,
         `${t} problems`,
+        `${t} complaints`,
         `${t} issues`,
+        `${t} not worth it`,
         `${t} disappointed`,
-        `${t} broken`,
         `${t} bugs`,
         `${t} worst`,
-        `${t} regret`,
         `${t} switched away from`,
-        `${t} not worth it`,
+        `${t} regret`,
+        `${t} bad experience`,
+        `${t} broken`,
+        `what's wrong with ${t}`,
+        `${t} negative review`,
+        `hate ${t}`,
       ];
-      reasoning = `Complaints intent: prioritizing queries that surface negative firsthand experiences.`;
+      reasoning = `Complaints intent: negative firsthand experience queries across Reddit and open web.`;
       break;
     }
     case "features": {
       queries = [
         `${t} feature request`,
         `${t} missing feature`,
-        `${t} wish it had`,
-        `${t} would be nice if`,
         `${t} roadmap`,
-        `${t} needs`,
-        `${t} lacking`,
+        `${t} wish it had`,
         `${t} feedback`,
+        `${t} needs`,
+        `${t} would be nice if`,
+        `${t} lacking`,
+        `${t} improvement`,
+        `${t} suggestion`,
+        `${t} feature wishlist`,
       ];
-      reasoning = `Feature-request intent: prioritizing queries that surface desired/missing functionality.`;
+      reasoning = `Feature intent: queries that surface desired and missing functionality.`;
       break;
     }
     case "sentiment": {
       queries = [
         `${t} review`,
         `${t} opinions`,
-        `${t} thoughts`,
         `${t} experience`,
+        `${t} thoughts`,
         `${t} worth it`,
         `${t} good or bad`,
+        `is ${t} good`,
+        `${t} honest review`,
         `${t} reddit`,
+        `${t} community opinion`,
       ];
-      reasoning = `Sentiment intent: gathering a diverse spread of general opinion threads to avoid over-indexing on one discussion.`;
+      reasoning = `Sentiment: diverse opinion queries to avoid over-indexing on a single discussion.`;
       break;
     }
     case "search":
@@ -91,22 +105,26 @@ export function planQueries(
     default: {
       queries = [
         `${t} review`,
+        `${t} experience`,
         `${t} problems`,
         `${t} complaints`,
-        `${t} alternatives`,
         `${t} vs`,
-        `${t} pricing`,
         `${t} worth it`,
-        `${t} experience`,
+        `${t} alternatives`,
         `${t} reddit`,
+        `${t} pricing`,
         `${t} feature request`,
+        `is ${t} good`,
+        `${t} honest opinion`,
+        `${t} community`,
+        `${t} discussion`,
       ];
-      reasoning = `General analysis: broad mix of praise, complaint, comparison, and pricing queries for balanced coverage.`;
+      reasoning = `General: broad mix of praise, complaint, comparison, and community queries.`;
       break;
     }
   }
 
-  const capped = queries.slice(0, cap);
+  const capped = deduplicateQueries(queries).slice(0, cap);
   return {
     intent,
     primaryTopic: t,
@@ -116,12 +134,20 @@ export function planQueries(
   };
 }
 
+function deduplicateQueries(queries: string[]): string[] {
+  const seen = new Set<string>();
+  return queries.filter((q) => {
+    const k = q.trim().toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 /**
- * Given a batch of already-retrieved discussions, decide whether a second
- * round of targeted queries would meaningfully improve coverage (adaptive
- * research loop). Looks for signals like: too few distinct subreddits, too
- * few results overall, or an intent that specifically benefits from
- * follow-up (e.g. complaints found but no context on why).
+ * Adaptive follow-up queries when first-round coverage is thin.
+ * Uses broader phrasing to surface discussions from niche communities
+ * that may not use product-specific terminology.
  */
 export function planFollowUpQueries(
   intent: ReadditIntent,
@@ -131,17 +157,22 @@ export function planFollowUpQueries(
 ): string[] {
   const followUps: string[] = [];
 
-  if (firstRoundResultCount < 8) {
-    followUps.push(`${topic}`, `${topic} discussion`);
+  if (firstRoundResultCount < 10) {
+    // Broaden — the topic might be niche, a brand, or an acronym
+    followUps.push(topic, `${topic} discussion`, `"${topic}"`);
   }
   if (firstRoundSubredditCount < 3) {
-    followUps.push(`${topic} community`, `${topic} users`);
+    // Try community-level discovery
+    followUps.push(`${topic} community`, `${topic} users`, `r/${topic.replace(/\s+/g, "")}`);
   }
-  if (intent === "ask") {
-    followUps.push(`${topic} explained`, `${topic} why`);
+  if (intent === "ask" || intent === "analyze") {
+    followUps.push(`${topic} explained`, `${topic} overview`, `${topic} how it works`);
+  }
+  if (intent === "complaints") {
+    followUps.push(`${topic} rant`, `${topic} negative`, `${topic} cancel`);
   }
 
-  return Array.from(new Set(followUps)).slice(0, 4);
+  return deduplicateQueries(followUps).slice(0, 5);
 }
 
 /**
